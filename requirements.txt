@@ -195,4 +195,3 @@ wrapt==1.15.0
 y-py==0.5.9
 ypy-websocket==0.8.2
 zipp==3.15.0
-wandb
