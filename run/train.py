@@ -958,7 +958,7 @@ def run(ctxt=None):
 
     wandb.init(
         project="identifiable-rl",
-        config=dict(args),
+        config=vars(args),
     )
 
     # Setup runner
