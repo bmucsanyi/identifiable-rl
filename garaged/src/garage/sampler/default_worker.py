@@ -8,6 +8,7 @@ from garage import TrajectoryBatch
 from garage.experiment import deterministic
 from garage.sampler.env_update import EnvUpdate
 from garage.sampler.worker import Worker
+from iod.disentanglement import linear_disentanglement
 
 
 class DefaultWorker(Worker):
@@ -37,6 +38,7 @@ class DefaultWorker(Worker):
                          max_path_length=max_path_length,
                          worker_number=worker_number)
         self.agent = None
+        self.encoder = None
         self.env = None
         self._observations = []
         self._last_observations = []
@@ -71,6 +73,12 @@ class DefaultWorker(Worker):
             self.agent.set_param_values(agent_update)
         elif agent_update is not None:
             self.agent = agent_update
+
+    def update_encoder(self, encoder_update):
+        if isinstance(encoder_update, (dict, tuple, np.ndarray)):
+            self.encoder.load_state_dict(encoder_update)
+        elif encoder_update is not None:
+            self.encoder = encoder_update
 
     def update_env(self, env_update):
         """Use any non-None env_update as a new environment.
@@ -155,6 +163,23 @@ class DefaultWorker(Worker):
         self._env_infos = defaultdict(list)
         agent_infos = self._agent_infos
         self._agent_infos = defaultdict(list)
+
+        # Calculate disentanglement score if we have both ground-truth states
+        # and encoder outputs
+        if len(self._ground_truth_states) > 0 and len(self._encoder_outputs) > 0:
+            # Convert lists to numpy arrays
+            ground_truth_matrix = np.concatenate(self._ground_truth_states, axis=0)
+            encoder_matrix = np.concatenate(self._encoder_outputs, axis=0)
+
+            # Calculate linear disentanglement score
+            r_square = linear_disentanglement(ground_truth_matrix, encoder_matrix, mode="r2").item()
+        else:
+            r_square = None
+
+        # Clear the lists
+        self._ground_truth_states = []
+        self._encoder_outputs = []
+
         for k, v in agent_infos.items():
             agent_infos[k] = np.asarray(v)
         for k, v in env_infos.items():
@@ -166,7 +191,7 @@ class DefaultWorker(Worker):
                                np.asarray(actions), np.asarray(rewards),
                                np.asarray(terminals), dict(env_infos),
                                dict(agent_infos), np.asarray(lengths,
-                                                             dtype='i'))
+                                                             dtype='i')), r_square
 
     def rollout(self):
         """Sample a single rollout of the agent in the environment.

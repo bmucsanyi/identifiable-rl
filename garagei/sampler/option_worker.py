@@ -27,6 +27,8 @@ class OptionWorker(DefaultWorker):
         self._cur_extra_keys = set()
         self._render = False
         self._deterministic_policy = None
+        self._ground_truth_states = []
+        self._encoder_outputs = []
 
     def update_env(self, env_update):
         if env_update is not None:
@@ -93,6 +95,22 @@ class OptionWorker(DefaultWorker):
 
         self.agent.reset()
 
+        # Clear the lists for a new rollout
+        self._ground_truth_states = []
+        self._encoder_outputs = []
+
+        # Store initial state
+        obs = self._prev_obs
+        if hasattr(self, 'obs_dim'):
+            obs = self._prev_obs[..., :self.obs_dim]
+        self._ground_truth_states.append(obs)
+
+        # Get encoder output if available
+        if self.encoder is not None:
+            with torch.no_grad():
+                initial_encoder_output = self.encoder(torch.from_numpy(obs)).mean.numpy()
+            self._encoder_outputs.append(initial_encoder_output)
+
     def step_rollout(self):
         """Take a single time-step in the current rollout.
 
@@ -133,6 +151,27 @@ class OptionWorker(DefaultWorker):
                 next_o, r, d, env_info = self.env.step(a, render=self._render)
             else:
                 next_o, r, d, env_info = self.env.step(a)
+
+            # Record ground-truth state and encoder output
+            if self.goal_rep is not None:
+                # Extract state without goal
+                state = next_o[..., :next_o.shape[-1] // 2]
+                self._ground_truth_states.append(state)
+
+                # Get encoder representation if available
+                if self.encoder is not None:
+                    with torch.no_grad():
+                        encoder_output = self.encoder(torch.from_numpy(state)).mean.numpy()
+                    self._encoder_outputs.append(encoder_output)
+            else:
+                # Use full observation as state
+                self._ground_truth_states.append(next_o)
+
+                # Get encoder representation if available
+                if self.encoder is not None:
+                    with torch.no_grad():
+                        encoder_output = self.encoder(torch.from_numpy(next_o)).mean.numpy()
+                    self._encoder_outputs.append(encoder_output)
 
             if self.goal_rep is not None:
                 self._observations.append(np.concatenate([self._prev_obs[..., :self.obs_dim], self.goal], axis=-1))

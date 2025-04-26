@@ -4,6 +4,7 @@ from collections import defaultdict
 
 import numpy as np
 import torch
+import wandb
 
 import global_context
 from garage import TrajectoryBatch
@@ -86,7 +87,7 @@ class METRA(IOD):
         self.dual_slack = dual_slack
         self.dual_dist = dual_dist
 
-        self.use_discrete_sac = use_discrete_sac    
+        self.use_discrete_sac = use_discrete_sac
         self._reward_scale_factor = scale_reward
         if self.use_discrete_sac:
             self._target_entropy = np.log(self._env_spec.action_space.n) * target_coef
@@ -245,7 +246,7 @@ class METRA(IOD):
         # Make sure replay buffer is used and has enough transitions
         if self.replay_buffer is not None and self.replay_buffer.n_transitions_stored < self.min_buffer_size:
             return {}
-        
+
         for _ in range(self._trans_optimization_epochs):
             train_store = {}
 
@@ -627,7 +628,7 @@ class METRA(IOD):
             random_option_colors = get_option_colors(random_options * 4)
 
         # Generate random trajectories based on random options
-        random_trajectories = self._get_trajectories(
+        random_trajectories, r_square_dict = self._get_trajectories(
             runner,
             sampler_key='option_policy',
             extras=self._generate_option_extras(random_options),
@@ -638,6 +639,8 @@ class METRA(IOD):
             env_update=dict(_action_noise_std=None),
         )
 
+        wandb.log(r_square_dict)
+
         # Visualize trajectories
         with FigManager(runner, 'TrajPlot_RandomZ') as fm:
             runner._env.render_trajectories(
@@ -646,7 +649,7 @@ class METRA(IOD):
 
         data = self.process_samples(random_trajectories)
         last_obs = torch.stack([torch.from_numpy(ob[-1]).to(self.device) for ob in data['obs']])
-        
+
         option_dists = self.traj_encoder(last_obs)
 
         option_means = option_dists.mean.detach().cpu().numpy()
@@ -694,7 +697,7 @@ class METRA(IOD):
                     goal_obs = env.render_goal(goal_idx=goal_idx).copy().astype(np.float32)
                     goal_obs = np.tile(goal_obs, self.frame_stack or 1).flatten()
                     goals.append((goal_obs, {'goal_idx': goal_idx, 'goal_name': goal_name}))
-            
+
             elif self.env_name in ['dmc_cheetah', 'dmc_quadruped', 'dmc_humanoid']:
                 for i in range(self.num_zero_shot_goals):
                     env.reset()
@@ -760,7 +763,7 @@ class METRA(IOD):
                     option = None
                     while step < self.max_path_length and not done:
                         if self.inner:
-                            if self.no_diff_in_rep: 
+                            if self.no_diff_in_rep:
                                 te_input = torch.from_numpy(goal_obs[None, ...]).to(self.device)
                                 phi = self.traj_encoder(te_input).mean[0]
 
@@ -813,7 +816,7 @@ class METRA(IOD):
                             elif self.env_name in ['half_cheetah']:
                                 cur_loc = env.unwrapped._get_obs()[:1]
                             else:
-                                cur_loc = env.unwrapped._get_obs()[:2] 
+                                cur_loc = env.unwrapped._get_obs()[:2]
 
                             if np.linalg.norm(cur_loc - goal_info['goal_loc']) < 3:
                                 hit_success_3 = 1.
@@ -852,7 +855,7 @@ class METRA(IOD):
                             end_success_3 = 1.
                         if distance < 1:
                             end_success_1 = 1.
-                    
+
                         goal_metrics[f'HitSuccess3{method}'].append(hit_success_3)
                         goal_metrics[f'EndSuccess3{method}'].append(end_success_3)
                         goal_metrics[f'AtSuccess3{method}'].append(at_success_3 / step)
@@ -887,7 +890,7 @@ class METRA(IOD):
                     if self.unit_length:
                         video_options = video_options / np.linalg.norm(video_options, axis=1, keepdims=True)
                 video_options = video_options.repeat(self.num_video_repeats, axis=0)
-            video_trajectories = self._get_trajectories(
+            video_trajectories, _ = self._get_trajectories(
                 runner,
                 sampler_key='local_option_policy',
                 extras=self._generate_option_extras(video_options),

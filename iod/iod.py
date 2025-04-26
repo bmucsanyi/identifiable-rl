@@ -238,11 +238,12 @@ class IOD(RLAlgorithm):
         policy_sampler_key = sampler_key[6:] if sampler_key.startswith('local_') else sampler_key
         time_get_trajectories = [0.0]
         with MeasureAndAccTime(time_get_trajectories):
-            trajectories, infos = runner.obtain_exact_trajectories(
+            trajectories, infos, r_square_dict = runner.obtain_exact_trajectories(
                 runner.step_itr,
                 sampler_key=sampler_key,
                 batch_size=batch_size,
                 agent_update=self._get_policy_param_values(policy_sampler_key),
+                encoder_update=self._get_encoder_param_values(),
                 env_update=env_update,
                 worker_update=worker_update,
                 extras=extras,
@@ -255,7 +256,7 @@ class IOD(RLAlgorithm):
                 if key not in traj['env_infos']:
                     continue
 
-        return trajectories
+        return trajectories, r_square_dict
 
     def _get_train_trajectories(self, runner):
         default_kwargs = dict(
@@ -269,7 +270,7 @@ class IOD(RLAlgorithm):
         )
         kwargs = dict(default_kwargs, **self._get_train_trajectories_kwargs(runner))
 
-        paths = self._get_trajectories(**kwargs)
+        paths, _ = self._get_trajectories(**kwargs)
 
         return paths
 
@@ -313,6 +314,15 @@ class IOD(RLAlgorithm):
 
     def _get_policy_param_values(self, key):
         param_dict = self.policy[key].get_param_values()
+        for k in param_dict.keys():
+            if self.sample_cpu:
+                param_dict[k] = param_dict[k].detach().cpu()
+            else:
+                param_dict[k] = param_dict[k].detach()
+        return param_dict
+
+    def _get_encoder_param_values(self):
+        param_dict = self.traj_encoder.state_dict()
         for k in param_dict.keys():
             if self.sample_cpu:
                 param_dict[k] = param_dict[k].detach().cpu()
