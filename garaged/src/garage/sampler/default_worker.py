@@ -78,7 +78,7 @@ class DefaultWorker(Worker):
         if isinstance(encoder_update, (dict, tuple, np.ndarray)):
             self.encoder.load_state_dict(encoder_update)
         elif encoder_update is not None:
-            self.encoder = encoder_update
+            self.encoder = encoder_update.cpu()
 
     def update_env(self, env_update):
         """Use any non-None env_update as a new environment.
