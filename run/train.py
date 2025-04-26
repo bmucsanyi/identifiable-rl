@@ -13,6 +13,7 @@ import functools
 import os
 import platform
 import torch.multiprocessing as mp
+import wandb
 
 if 'mac' in platform.platform():
     pass
@@ -95,7 +96,7 @@ def make_env(args: argparse.Namespace, max_path_length: int) -> Any:
             env = RenderWrapper(env)
         else:
             raise NotImplementedError
-        
+
         if args.env in ['dmc_quadruped_goal', 'dmc_humanoid_goal']:
             from envs.custom_dmc_tasks.goal_wrappers import GoalWrapper
 
@@ -148,7 +149,7 @@ def make_env(args: argparse.Namespace, max_path_length: int) -> Any:
             reward_type=args.downstream_reward_type,
         )
         cp_num_truncate_obs = 2
-    
+
     else:
         raise NotImplementedError
 
@@ -273,7 +274,7 @@ def get_argparser():
     parser.add_argument('--unit_length', type=int, default=1, choices=[0, 1], help="Whether to use Gaussian (0) or vMF (1) skills. This is only relevant for continuous skills.")
     parser.add_argument('--inner', type=int, default=1, choices=[0, 1], help="Differentiates between transitions logic (METRA) and states logic (DIAYN)")
     parser.add_argument('--turn_off_dones', type=int, default=0, choices=[0, 1], help="This turns off any done=True flags from the environment and makes them done=False. See https://arxiv.org/pdf/1712.00378 for a detailed discussion.")
-    
+
     # DADS specific parameters
     parser.add_argument('--num_alt_samples', type=int, default=100, help="(DADS only) Number of alternative z's to sample to compute skill dynamics denominator.")
     parser.add_argument('--split_group', type=int, default=65536, help="(DADS only)")
@@ -304,7 +305,7 @@ def get_argparser():
     parser.add_argument('--add_log_sum_exp_to_rewards', type=int, default=0, choices=[0, 1], help="Adds the second term in the contrastive loss (the 'log-sum-exp') to the rewards as well")
     parser.add_argument('--add_penalty_to_rewards', default=0, type=int, choices=[0, 1])
     parser.add_argument('--metra_mlp_rep', type=int, default=0, choices=[0, 1], help="Uses the more general f(s, s')^T z parametrization.")
-    
+
     # Zero-shot goal reaching flags
     parser.add_argument('--goal_range', type=float, default=50)
     parser.add_argument('--num_zero_shot_goals', type=int, default=50)
@@ -394,7 +395,7 @@ def run(ctxt=None):
     # Get observation and action dimensions
     obs_dim = env.spec.observation_space.flat_dim
     action_dim = env.spec.action_space.flat_dim
-    
+
     # If using pixel-based environments, we need to know the obs dimension *after* encoding
     if args.encoder:
         def make_encoder(**kwargs):
@@ -486,7 +487,7 @@ def run(ctxt=None):
             te_encoder = make_encoder(spectral_normalization=True)
         else:
             te_encoder = None
-        traj_encoder = with_encoder(traj_encoder, encoder=te_encoder)    
+        traj_encoder = with_encoder(traj_encoder, encoder=te_encoder)
 
 
     # ********************
@@ -613,7 +614,7 @@ def run(ctxt=None):
 
     # Setup replay buffer
     replay_buffer = PathBufferEx(
-        capacity_in_transitions=int(args.sac_max_buffer_size), 
+        capacity_in_transitions=int(args.sac_max_buffer_size),
         pixel_shape=pixel_shape,
         sample_goals=(args.algo == 'crl' or args.algo == 'metra_sf'),
         discount=args.sac_discount,
@@ -669,8 +670,8 @@ def run(ctxt=None):
                 {'params': log_alpha.parameters(), 'lr': _finalize_lr(args.sac_lr_a)},
             ])
         })
-    
-    # NOTE: for metra_sf, the q networks are really just the "psi" successor features that 
+
+    # NOTE: for metra_sf, the q networks are really just the "psi" successor features that
     # are learned in the same way as the q functions in the other algorithms
     elif args.algo == 'metra_sf':
         qf1 = ContinuousMLPQFunctionEx(
@@ -827,7 +828,7 @@ def run(ctxt=None):
             **algo_kwargs,
             **skill_common_args,
         )
-        
+
     elif args.algo == 'metra_sf':
         algo_kwargs.update(
             metra_mlp_rep=args.metra_mlp_rep,
@@ -954,6 +955,11 @@ def run(ctxt=None):
         algo.option_policy.cpu()
     else:
         algo.option_policy.to(device)
+
+    wandb.init(
+        project="identifiable-rl",
+        config=dict(args),
+    )
 
     # Setup runner
     runner.setup(
