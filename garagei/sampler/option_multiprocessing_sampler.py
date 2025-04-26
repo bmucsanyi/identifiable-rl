@@ -118,7 +118,7 @@ class OptionMultiprocessingSampler(MultiprocessingSampler):
         worker_ups = self._factory.prepare_worker_messages(worker_update)
 
         trajectories = defaultdict(list)
-        r_squares = defaultdict(list)
+        r_squares = []
         for worker_number, q in enumerate(self._to_worker):
             q.put_nowait(
                 (
@@ -157,7 +157,7 @@ class OptionMultiprocessingSampler(MultiprocessingSampler):
                         trajectories[worker_n].append(batch)
 
                         if r_square is not None:
-                            r_squares[worker_n].append(r_square)
+                            r_squares.append(r_square)
 
                         if len(trajectories[worker_n]) < n_traj_per_workers[worker_n]:
                             self._to_worker[worker_n].put_nowait(("rollout", ()))
