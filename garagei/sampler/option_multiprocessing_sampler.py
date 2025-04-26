@@ -1,6 +1,7 @@
 """A multiprocessing sampler which avoids waiting as much as possible."""
 
 import itertools
+import numpy as np
 import torch.multiprocessing as mp
 import multiprocessing.dummy as mpd
 from collections import defaultdict
@@ -117,6 +118,7 @@ class OptionMultiprocessingSampler(MultiprocessingSampler):
         worker_ups = self._factory.prepare_worker_messages(worker_update)
 
         trajectories = defaultdict(list)
+        r_squares = defaultdict(list)
         for worker_number, q in enumerate(self._to_worker):
             q.put_nowait(
                 (
@@ -146,13 +148,17 @@ class OptionMultiprocessingSampler(MultiprocessingSampler):
 
                 if tag == "trajectory":
                     pbar.update(1)
-                    batch, agent_version, encoder_version, worker_n = contents
+                    batch, r_square, agent_version, encoder_version, worker_n = contents
 
                     if (
                         agent_version == self._agent_version
                         and encoder_version == self._encoder_version
                     ):
                         trajectories[worker_n].append(batch)
+
+                        if r_square is not None:
+                            r_squares[worker_n].append(r_square)
+
                         if len(trajectories[worker_n]) < n_traj_per_workers[worker_n]:
                             self._to_worker[worker_n].put_nowait(("rollout", ()))
                         elif (
@@ -174,6 +180,17 @@ class OptionMultiprocessingSampler(MultiprocessingSampler):
             itertools.chain(*[trajectories[i] for i in range(self._factory.n_workers)])
         )
 
+        if r_squares:
+            r_squares = np.array(r_squares)
+            r_square_dict = {
+                "r_square_min": np.min(r_squares),
+                "r_square_mean": np.mean(r_squares),
+                "r_square_max": np.max(r_squares),
+                "r_square_std": np.std(r_squares)
+            }
+        else:
+            r_square_dict = {}
+
         infos = defaultdict(list)
         if get_attrs is not None:
             for i in range(self._factory.n_workers):
@@ -183,7 +200,7 @@ class OptionMultiprocessingSampler(MultiprocessingSampler):
                 for k, v in contents.items():
                     infos[k].append(v)
 
-        return TrajectoryBatch.concatenate(*ordered_trajectories), infos
+        return TrajectoryBatch.concatenate(*ordered_trajectories), infos, r_square_dict
 
 
 def run_worker(
@@ -219,8 +236,8 @@ def run_worker(
         elif tag == "stop":
             pass
         elif tag == "rollout":
-            batch = inner_worker.rollout()
-            to_sampler.put_nowait(("trajectory", (batch, agent_version, encoder_version, worker_number)))
+            batch, r_square = inner_worker.rollout()
+            to_sampler.put_nowait(("trajectory", (batch, r_square, agent_version, encoder_version, worker_number)))
         elif tag == "get_attrs":
             keys = contents
             attr_dict = inner_worker.get_attrs(keys)

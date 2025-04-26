@@ -639,7 +639,8 @@ class METRA(IOD):
             env_update=dict(_action_noise_std=None),
         )
 
-        wandb.log(r_square_dict)
+        if r_square_dict:
+            wandb.log(r_square_dict)
 
         # Visualize trajectories
         with FigManager(runner, 'TrajPlot_RandomZ') as fm:
