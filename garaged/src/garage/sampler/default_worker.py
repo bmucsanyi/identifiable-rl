@@ -168,8 +168,8 @@ class DefaultWorker(Worker):
         # and encoder outputs
         if len(self._ground_truth_states) > 0 and len(self._encoder_outputs) > 0:
             # Convert lists to numpy arrays
-            ground_truth_matrix = np.concatenate(self._ground_truth_states, axis=0)
-            encoder_matrix = np.concatenate(self._encoder_outputs, axis=0)
+            ground_truth_matrix = np.stack(self._ground_truth_states, axis=0)
+            encoder_matrix = np.stack(self._encoder_outputs, axis=0)
 
             # Calculate linear disentanglement score
             r_square = linear_disentanglement(ground_truth_matrix, encoder_matrix, mode="r2").item()
