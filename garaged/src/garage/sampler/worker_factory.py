@@ -10,7 +10,7 @@ def identity_function(value):
     This function exists so it can be pickled.
 
     Args:
-        value(object): A value.
+        value (object): A value.
 
     Returns:
         object: The value.
@@ -31,14 +31,13 @@ class WorkerFactory:
     All arguments to this type must be passed by keyword.
 
     Args:
-        seed(int): The seed to use to intialize random number generators.
-        n_workers(int): The number of workers to use.
-        max_path_length(int): The maximum length paths which will be sampled.
-        worker_class(type): Class of the workers. Instances should implement
+        seed (int): The seed to use to intialize random number generators.
+        n_workers (int): The number of workers to use.
+        max_path_length (int): The maximum length paths which will be sampled.
+        worker_class (type): Class of the workers. Instances should implement
             the Worker interface.
         worker_args (dict or None): Additional arguments that should be passed
             to the worker.
-
     """
 
     def __init__(
@@ -67,9 +66,9 @@ class WorkerFactory:
         correct.
 
         Args:
-            objs(object or list): Must be either a single object or a list
+            objs (object or list): Must be either a single object or a list
                 of length n_workers.
-            preprocess(function): Function to call on each single object before
+            preprocess (function): Function to call on each single object before
                 creating the list.
 
         Raises:
