@@ -156,7 +156,7 @@ class OptionMultiprocessingSampler(MultiprocessingSampler):
                     ):
                         trajectories[worker_n].append(batch)
 
-                        if r_square is not None:
+                        if r_square:
                             r_squares.append(r_square)
 
                         if len(trajectories[worker_n]) < n_traj_per_workers[worker_n]:
@@ -181,13 +181,7 @@ class OptionMultiprocessingSampler(MultiprocessingSampler):
         )
 
         if r_squares:
-            r_squares = np.array(r_squares)
-            r_square_dict = {
-                "r_square_min": np.min(r_squares),
-                "r_square_mean": np.mean(r_squares),
-                "r_square_max": np.max(r_squares),
-                "r_square_std": np.std(r_squares)
-            }
+            r_square_dict = process_r_squares(r_squares)
         else:
             r_square_dict = {}
 
@@ -251,3 +245,22 @@ def run_worker(
             raise AssertionError(
                 "Unknown tag {} with contents {}".format(tag, contents)
             )
+
+def process_r_squares(r_squares):
+    r_square = np.array([elem["r_square"] for elem in r_squares])
+    r_square_dict = {
+        "r_square_min": np.min(r_square),
+        "r_square_mean": np.mean(r_square),
+        "r_square_max": np.max(r_square),
+        "r_square_std": np.std(r_square)
+    }
+
+    r_square_diff = np.array([elem["r_square_diff"] for elem in r_squares])
+    r_square_dict |= {
+        "r_square_diff_min": np.min(r_square_diff),
+        "r_square_diff_mean": np.mean(r_square_diff),
+        "r_square_diff_max": np.max(r_square_diff),
+        "r_square_diff_std": np.std(r_square_diff)
+    }
+
+    return r_square_dict

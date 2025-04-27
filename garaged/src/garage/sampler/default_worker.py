@@ -173,8 +173,17 @@ class DefaultWorker(Worker):
 
             # Calculate linear disentanglement score
             r_square = linear_disentanglement(ground_truth_matrix, encoder_matrix, mode="r2").item()
+
+            # Calculate differences between neighboring entries
+            ground_truth_matrix_diff = ground_truth_matrix[1:] - ground_truth_matrix[:-1]
+            encoder_matrix_diff = encoder_matrix[1:] - encoder_matrix[:-1]
+
+            # Calculate linear disentanglement score on differences
+            r_square_diff = linear_disentanglement(ground_truth_matrix_diff, encoder_matrix_diff, mode="r2").item()
+
+            r_square_dict = {"r_square": r_square, "r_square_diff": r_square_diff}
         else:
-            r_square = None
+            r_square_dict = {}
 
         # Clear the lists
         self._ground_truth_states = []
@@ -191,7 +200,7 @@ class DefaultWorker(Worker):
                                np.asarray(actions), np.asarray(rewards),
                                np.asarray(terminals), dict(env_infos),
                                dict(agent_infos), np.asarray(lengths,
-                                                             dtype='i')), r_square
+                                                             dtype='i')), r_square_dict
 
     def rollout(self):
         """Sample a single rollout of the agent in the environment.
