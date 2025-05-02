@@ -103,7 +103,11 @@ class OptionWorker(DefaultWorker):
         obs = self._prev_obs
         if hasattr(self, 'obs_dim'):
             obs = self._prev_obs[..., :self.obs_dim]
-        self._ground_truth_states.append(obs)
+
+        if hasattr(self.env, "ground_truth_state"):
+            self._ground_truth_states.append(self.env.ground_truth_state)
+        else:
+            self._ground_truth_states.append(obs)
 
         # Get encoder output if available
         if self.encoder is not None:
@@ -156,7 +160,11 @@ class OptionWorker(DefaultWorker):
             if self.goal_rep is not None:
                 # Extract state without goal
                 state = next_o[..., :next_o.shape[-1] // 2]
-                self._ground_truth_states.append(state)
+
+                if hasattr(self.env, "ground_truth_state"):
+                    self._ground_truth_states.append(self.env.ground_truth_state)
+                else:
+                    self._ground_truth_states.append(state)
 
                 # Get encoder representation if available
                 if self.encoder is not None:
@@ -165,7 +173,10 @@ class OptionWorker(DefaultWorker):
                     self._encoder_outputs.append(encoder_output)
             else:
                 # Use full observation as state
-                self._ground_truth_states.append(next_o)
+                if hasattr(self.env, "ground_truth_state"):
+                    self._ground_truth_states.append(self.env.ground_truth_state)
+                else:
+                    self._ground_truth_states.append(next_o)
 
                 # Get encoder representation if available
                 if self.encoder is not None:

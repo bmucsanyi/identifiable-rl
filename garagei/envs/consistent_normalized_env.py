@@ -39,6 +39,10 @@ class ConsistentNormalizedEnv(AkroWrapperTrait, gym.Wrapper):
 
         self.observation_space = self.env.observation_space
 
+    @property
+    def ground_truth_state(self):
+        return self.env.ground_truth_state
+
     def _apply_normalize_obs(self, obs):
         normalized_obs = (obs - self._obs_mean) / (np.sqrt(self._obs_var) + 1e-8)
         return normalized_obs

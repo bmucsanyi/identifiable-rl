@@ -27,7 +27,7 @@ class MetraSf(METRA):
         # Make sure replay buffer is used and has enough transitions
         if self.replay_buffer is not None and self.replay_buffer.n_transitions_stored < self.min_buffer_size:
             return {}
-        
+
         for _ in range(self._trans_optimization_epochs):
             train_store = {}
 
@@ -56,7 +56,7 @@ class MetraSf(METRA):
             mini_batch (Dict): mini batch data
         """
         # Compute successor feature loss
-        self._update_loss_sf_td(train_store, mini_batch)        
+        self._update_loss_sf_td(train_store, mini_batch)
 
         # Take gradient step on successor feature networks
         self._gradient_descent(
@@ -174,7 +174,7 @@ class MetraSf(METRA):
         with torch.no_grad():
             if self.turn_off_dones:
                 dones[...] = 0
-            
+
             # Compute successor feature targets
             if self.metra_mlp_rep:
                 sf_target = self.f_encoder(mini_batch['obs'], mini_batch['next_obs']) + self.discount * (1. - dones[:, None]) * target_next_sf

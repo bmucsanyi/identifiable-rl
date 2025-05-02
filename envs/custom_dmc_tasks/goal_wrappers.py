@@ -33,6 +33,10 @@ class GoalWrapper(AkroWrapperTrait, gym.Wrapper):
             state_shape=2,
         )
 
+    @property
+    def ground_truth_state(self):
+        return self.env.ground_truth_state
+
     def _transform(self, obs):
         pixels = self.env.render(mode='rgb_array', width=64, height=64).copy()
         pixels = pixels.flatten()
