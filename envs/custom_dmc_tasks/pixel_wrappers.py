@@ -105,7 +105,7 @@ class FrameStackWrapper(AkroWrapperTrait, gym.Wrapper):
 
     @property
     def ground_truth_state(self):
-        return self.env.ground_truth_state
+        return getattr(self.env, "ground_truth_state", None)
 
     def _transform_observation(self, cur_obs):
         assert len(self.frames) == self.num_frames
