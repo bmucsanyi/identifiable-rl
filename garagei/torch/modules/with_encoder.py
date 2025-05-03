@@ -72,6 +72,10 @@ class Encoder(nn.Module):
         self.encoder = CNN(self.pixel_depth, spectral_normalization=spectral_normalization, cnn_kernels=cnn_kernels)
 
     def forward(self, input):
+        unsqueezed = len(input.shape) == 1
+        if unsqueezed:
+            input = input.unsqueeze(0)
+
         assert len(input.shape) == 2
 
         pixel = input[..., :self.pixel_dim].reshape(-1, *self.pixel_shape).permute(0, 3, 1, 2)
@@ -82,6 +86,9 @@ class Encoder(nn.Module):
         rep = self.encoder(pixel)
         rep = rep.reshape(rep.shape[0], -1)
         output = torch.cat([rep, state], dim=-1)
+
+        if unsqueezed:
+            output = output.squeeze(0)
 
         return output
 
