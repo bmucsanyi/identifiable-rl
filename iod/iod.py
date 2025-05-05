@@ -238,7 +238,7 @@ class IOD(RLAlgorithm):
         policy_sampler_key = sampler_key[6:] if sampler_key.startswith('local_') else sampler_key
         time_get_trajectories = [0.0]
         with MeasureAndAccTime(time_get_trajectories):
-            trajectories, infos, r_square_dict = runner.obtain_exact_trajectories(
+            trajectories, infos, log_dict = runner.obtain_exact_trajectories(
                 runner.step_itr,
                 sampler_key=sampler_key,
                 batch_size=batch_size,
@@ -256,7 +256,7 @@ class IOD(RLAlgorithm):
                 if key not in traj['env_infos']:
                     continue
 
-        return trajectories, r_square_dict
+        return trajectories, log_dict
 
     def _get_train_trajectories(self, runner):
         default_kwargs = dict(

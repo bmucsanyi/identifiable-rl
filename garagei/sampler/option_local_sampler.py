@@ -79,20 +79,20 @@ class OptionLocalSampler(LocalSampler):
                                   worker_update=None,
                                   get_attrs=None):
         self._update_workers(agent_update, encoder_update, env_update, worker_update)
-        batches = []
-        r_squares = []
+        trajectories = []
+        log_data_list = []
         for worker, n_traj in zip(self._workers, n_traj_per_worker):
             for _ in range(n_traj):
-                batch, r_square = worker.rollout()
-                batches.append(batch)
+                batch, log_data = worker.rollout()
+                trajectories.append(batch)
 
-                if r_square:
-                    r_squares.append(r_square)
+                if log_data:
+                    log_data_list.append(log_data)
 
-        if r_squares:
-            r_square_dict = process_r_squares(r_squares)
+        if log_data_list:
+            log_dict = process_log_data(log_data_list, trajectories)
         else:
-            r_square_dict = {}
+            log_dict = {}
 
         infos = defaultdict(list)
         if get_attrs is not None:
@@ -101,23 +101,33 @@ class OptionLocalSampler(LocalSampler):
                 for k, v in contents.items():
                     infos[k].append(v)
 
-        return TrajectoryBatch.concatenate(*batches), infos, r_square_dict
+        return TrajectoryBatch.concatenate(*trajectories), infos, log_dict
 
-def process_r_squares(r_squares):
-    r_square = np.array([elem["r_square"] for elem in r_squares])
-    r_square_dict = {
-        "r_square_min": np.min(r_square),
-        "r_square_mean": np.mean(r_square),
-        "r_square_max": np.max(r_square),
-        "r_square_std": np.std(r_square)
+def process_log_data(log_data_list, trajectories):
+    r_squares = np.array([elem["r_square"] for elem in log_data_list])
+    r_square_diffs = np.array([elem["r_square_diff"] for elem in log_data_list])
+    returns = np.array([sum(elem.rewards) for elem in trajectories])
+    returns_argmax = np.argmax(returns)
+    returns_argmin = np.argmin(returns)
+
+    log_dict = {
+        # Record R^2 for phi(s)
+        "r_square_min": np.min(r_squares),
+        "r_square_mean": np.mean(r_squares),
+        "r_square_max": np.max(r_squares),
+        "r_square_std": np.std(r_squares),
+        "r_square_for_max_return": r_squares[returns_argmax],
+        "r_square_for_min_return": r_squares[returns_argmin],
+        # Record R^2 for phi(s) - phi(s')
+        "r_square_diff_min": np.min(r_square_diffs),
+        "r_square_diff_mean": np.mean(r_square_diffs),
+        "r_square_diff_max": np.max(r_square_diffs),
+        "r_square_diff_std": np.std(r_square_diffs),
+        "r_square_diff_for_max_return": r_square_diffs[returns_argmax],
+        "r_square_diff_for_min_return": r_square_diffs[returns_argmin],
+        # Record max and min return
+        "max_return": np.max(returns),
+        "min_return": np.min(returns),
     }
 
-    r_square_diff = np.array([elem["r_square_diff"] for elem in r_squares])
-    r_square_dict |= {
-        "r_square_diff_min": np.min(r_square_diff),
-        "r_square_diff_mean": np.mean(r_square_diff),
-        "r_square_diff_max": np.max(r_square_diff),
-        "r_square_diff_std": np.std(r_square_diff)
-    }
-
-    return r_square_dict
+    return log_dict

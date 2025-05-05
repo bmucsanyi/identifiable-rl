@@ -486,7 +486,7 @@ class OptionLocalRunner(LocalRunner):
                     )
                 )
 
-            paths, infos, r_square_dict = sampler.obtain_exact_trajectories(
+            paths, infos, log_dict = sampler.obtain_exact_trajectories(
                 n_traj_per_workers,
                 agent_update=agent_update,
                 encoder_update=encoder_update,
@@ -500,7 +500,7 @@ class OptionLocalRunner(LocalRunner):
             # XXX: Assume that env_infos always contains 2D coordinates.
             self._stats.total_env_steps += sum([len(p["rewards"]) for p in paths])
 
-        return paths, infos, r_square_dict
+        return paths, infos, log_dict
 
     def step_epochs(
         self,

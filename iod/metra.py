@@ -628,7 +628,7 @@ class METRA(IOD):
             random_option_colors = get_option_colors(random_options * 4)
 
         # Generate random trajectories based on random options
-        random_trajectories, r_square_dict = self._get_trajectories(
+        random_trajectories, log_dict = self._get_trajectories(
             runner,
             sampler_key='option_policy',
             extras=self._generate_option_extras(random_options),
@@ -639,8 +639,8 @@ class METRA(IOD):
             env_update=dict(_action_noise_std=None),
         )
 
-        if r_square_dict:
-            wandb.log(r_square_dict)
+        if log_dict:
+            wandb.log(log_dict)
 
         # Visualize trajectories
         with FigManager(runner, 'TrajPlot_RandomZ') as fm:
