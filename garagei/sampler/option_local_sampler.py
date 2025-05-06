@@ -106,6 +106,8 @@ class OptionLocalSampler(LocalSampler):
 def process_log_data(log_data_list, trajectories):
     r_squares = np.array([elem["r_square"] for elem in log_data_list])
     r_square_diffs = np.array([elem["r_square_diff"] for elem in log_data_list])
+    pearsons = np.array([elem["pearson"] for elem in log_data_list])
+    pearson_diffs = np.array([elem["pearson_diff"] for elem in log_data_list])
     returns = np.array([sum(elem.rewards) for elem in trajectories])
     returns_argmax = np.argmax(returns)
     returns_argmin = np.argmin(returns)
@@ -125,6 +127,20 @@ def process_log_data(log_data_list, trajectories):
         "r_square_diff_std": np.std(r_square_diffs),
         "r_square_diff_for_max_return": r_square_diffs[returns_argmax],
         "r_square_diff_for_min_return": r_square_diffs[returns_argmin],
+        # Record Pearson for phi(s)
+        "pearson_min": np.min(pearsons),
+        "pearson_mean": np.mean(pearsons),
+        "pearson_max": np.max(pearsons),
+        "pearson_std": np.std(pearsons),
+        "pearson_for_max_return": pearsons[returns_argmax],
+        "pearson_for_min_return": pearsons[returns_argmin],
+        # Record Pearson for phi(s) - phi(s')
+        "pearson_diff_min": np.min(pearson_diffs),
+        "pearson_diff_mean": np.mean(pearson_diffs),
+        "pearson_diff_max": np.max(pearson_diffs),
+        "pearson_diff_std": np.std(pearson_diffs),
+        "pearson_diff_for_max_return": pearson_diffs[returns_argmax],
+        "pearson_diff_for_min_return": pearson_diffs[returns_argmin],
         # Record max and min return
         "max_return": np.max(returns),
         "min_return": np.min(returns),

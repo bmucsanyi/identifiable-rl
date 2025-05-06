@@ -173,6 +173,7 @@ class DefaultWorker(Worker):
 
             # Calculate linear disentanglement score
             r_square = linear_disentanglement(ground_truth_matrix, encoder_matrix, mode="r2").item()
+            pearson = linear_disentanglement(ground_truth_matrix, encoder_matrix, mode="pearson").item()
 
             # Calculate differences between neighboring entries
             ground_truth_matrix_diff = ground_truth_matrix[1:] - ground_truth_matrix[:-1]
@@ -180,8 +181,9 @@ class DefaultWorker(Worker):
 
             # Calculate linear disentanglement score on differences
             r_square_diff = linear_disentanglement(ground_truth_matrix_diff, encoder_matrix_diff, mode="r2").item()
+            pearson_diff = linear_disentanglement(ground_truth_matrix_diff, encoder_matrix_diff, mode="pearson").item()
 
-            log_dict = {"r_square": r_square, "r_square_diff": r_square_diff}
+            log_dict = {"r_square": r_square, "r_square_diff": r_square_diff, "pearson": pearson, "pearson_diff": pearson_diff}
         else:
             log_dict = {}
 
