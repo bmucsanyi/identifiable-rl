@@ -1085,7 +1085,7 @@ def run(ctxt=None):
     )
 
     if hasattr(algo, "Z"):
-        wandb.log({"Z_cond_num": torch.linalg.cond(algo.Z, p=2).item()})
+        wandb.log({"Z_cond_num": np.linalg.cond(algo.Z).item()})
 
     # Setup runner
     runner.setup(
