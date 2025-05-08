@@ -60,6 +60,119 @@ from iod.sac import SAC
 from iod.utils import get_normalizer_preset, get_gaussian_module_construction, get_log_dir, get_exp_name
 
 
+from torch import nn
+
+class Dummy:
+    def __init__(self, mean):
+        self.mean = mean
+        self.stddev = torch.ones_like(mean)
+
+class TrajEncoderMLP(nn.Module):
+    def __init__(self, traj_encoder_obs_dim, output_dim):
+        super().__init__()
+        self.linear = nn.Linear(traj_encoder_obs_dim, output_dim)
+        self.linear2 = nn.Linear(output_dim, output_dim)
+
+    def forward(self, x):
+        unsqueezed = len(x.shape) == 1
+
+        if unsqueezed:
+            x = x.unsqueeze(0)
+
+        x = self.linear(x)
+        x = torch.nn.functional.leaky_relu(x, negative_slope=0.25)
+        x = self.linear2(x)
+
+        if unsqueezed:
+            x = x.squeeze(0)
+
+        return Dummy(x)
+
+class TrajEncoderLinReg(nn.Module):
+    def __init__(self, traj_encoder_obs_dim, output_dim):
+        super().__init__()
+        self.linear = nn.Linear(traj_encoder_obs_dim, output_dim)
+        nn.init.eye_(self.linear.weight)
+
+    def forward(self, x):
+        unsqueezed = len(x.shape) == 1
+
+        if unsqueezed:
+            x = x.unsqueeze(0)
+
+        x = self.linear(x)
+
+        if unsqueezed:
+            x = x.squeeze(0)
+
+        return Dummy(x)
+
+class TrajEncoderSkipConn(nn.Module):
+    def __init__(self, traj_encoder_obs_dim, output_dim):
+        super().__init__()
+        self.linear = nn.Linear(traj_encoder_obs_dim, output_dim)
+        self.linear2 = nn.Linear(output_dim, output_dim)
+
+        # Add a projection layer if input and output dimensions don't match
+        self.needs_projection = traj_encoder_obs_dim != output_dim
+        if self.needs_projection:
+            self.projection = nn.Linear(traj_encoder_obs_dim, output_dim, bias=False)
+
+    def forward(self, x):
+        unsqueezed = len(x.shape) == 1
+
+        if unsqueezed:
+            x = x.unsqueeze(0)
+
+        identity = x
+
+        # Apply the transformation (this is one ResNet block)
+        x = self.linear(x)
+        x = torch.nn.functional.leaky_relu(x, negative_slope=0.25)
+        x = self.linear2(x)
+
+        # Add the skip connection
+        if self.needs_projection:
+            x = x + self.projection(identity)
+        else:
+            x = x + identity
+
+        if unsqueezed:
+            x = x.squeeze(0)
+
+        return Dummy(x)
+
+class TrajEncoderLayerwiseSkipConn(nn.Module):
+    def __init__(self, traj_encoder_obs_dim, output_dim):
+        super().__init__()
+        self.linear = nn.Linear(traj_encoder_obs_dim, output_dim)
+        self.linear2 = nn.Linear(output_dim, output_dim)
+
+        # Projection for first skip connection
+        self.projection = nn.Linear(traj_encoder_obs_dim, output_dim, bias=False)
+
+    def forward(self, x):
+        unsqueezed = len(x.shape) == 1
+
+        if unsqueezed:
+            x = x.unsqueeze(0)
+
+        # First layer with skip connection
+        identity1 = x
+        x = self.linear(x)
+        x = torch.nn.functional.leaky_relu(x, negative_slope=0.25)
+        x = x + self.projection(identity1)  # First skip connection
+
+        # Second layer with skip connection
+        identity2 = x
+        x = self.linear2(x)
+        x = x + identity2  # Second skip connection
+
+        if unsqueezed:
+            x = x.squeeze(0)
+
+        return Dummy(x)
+
 EXP_DIR = 'exp'
 if os.environ.get('START_METHOD') is not None:
     START_METHOD = os.environ['START_METHOD']
@@ -297,6 +410,10 @@ def get_argparser():
     parser.add_argument('--sample_new_z', type=int, default=0, choices=[0, 1])
     parser.add_argument('--num_negative_z', type=int, default=256)
     parser.add_argument('--infonce_lam', type=float, default=1.0)
+    parser.add_argument('--use_discrete_set_of_cont_options', type=int, default=0, choices=[0, 1],
+                        help="Use a fixed discrete set of continuous option vectors")
+    parser.add_argument('--num_options', type=int, default=10,
+                        help="Number of discrete option vectors to use when use_discrete_set_of_cont_options=1")
 
     # DIAYN specific parameters
     parser.add_argument('--diayn_include_baseline', type=int, default=0, choices=[0, 1])
@@ -482,12 +599,16 @@ def run(ctxt=None):
         layer_normalization=args.use_layer_norm
     )
     traj_encoder = module_cls(**module_kwargs)
+
+    traj_encoder = TrajEncoderLayerwiseSkipConn(traj_encoder_obs_dim, output_dim)
+
     if args.encoder:
         if args.spectral_normalization:
             te_encoder = make_encoder(spectral_normalization=True)
         else:
             te_encoder = None
         traj_encoder = with_encoder(traj_encoder, encoder=te_encoder)
+
 
 
     # ********************
@@ -776,7 +897,9 @@ def run(ctxt=None):
         trans_optimization_epochs=args.trans_optimization_epochs,
         discount=args.sac_discount,
         discrete=args.discrete,
-        unit_length=args.unit_length
+        unit_length=args.unit_length,
+        use_discrete_set_of_cont_options=args.use_discrete_set_of_cont_options,
+        num_options=args.num_options,
     )
 
     skill_common_args = dict(
@@ -960,6 +1083,9 @@ def run(ctxt=None):
         project="identifiable-rl",
         config=vars(args),
     )
+
+    if hasattr(algo, "Z"):
+        wandb.log({"Z_cond_num": torch.linalg.cond(algo.Z, p=2).item()})
 
     # Setup runner
     runner.setup(

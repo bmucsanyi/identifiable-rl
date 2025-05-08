@@ -147,12 +147,18 @@ class METRA(IOD):
         if self.discrete:
             extras = self._generate_option_extras(np.eye(self.dim_option)[np.random.randint(0, self.dim_option, runner._train_args.batch_size)])
         else:
-            if self.uniform_z:
-                random_options = np.random.uniform(low=-1.0, high=1.0, size=(runner._train_args.batch_size, self.dim_option))
+            if self.use_discrete_set_of_cont_options:
+                # Sample from the discrete set of continuous options
+                indices = np.random.randint(0, self.num_options, runner._train_args.batch_size)
+                random_options = self.Z[indices]
             else:
-                random_options = np.random.randn(runner._train_args.batch_size, self.dim_option)
-                if self.unit_length:
-                    random_options /= np.linalg.norm(random_options, axis=-1, keepdims=True)
+                if self.uniform_z:
+                    random_options = np.random.uniform(low=-1.0, high=1.0, size=(runner._train_args.batch_size, self.dim_option))
+                else:
+                    random_options = np.random.randn(runner._train_args.batch_size, self.dim_option)
+                    if self.unit_length:
+                        random_options /= np.linalg.norm(random_options, axis=-1, keepdims=True)
+
             extras = self._generate_option_extras(random_options)
 
         return dict(
@@ -619,12 +625,25 @@ class METRA(IOD):
                 random_option_colors.extend([cm.get_cmap(cmap)(colors[i])[:3]])
             random_option_colors = np.array(random_option_colors)
         else:
-            if self.uniform_z:
-                random_options = np.random.uniform(low=-1.0, high=1.0, size=(self.num_random_trajectories, self.dim_option))
+            if self.use_discrete_set_of_cont_options:
+                # Handle evaluation sampling from discrete set
+                if self.num_options <= self.num_random_trajectories:
+                    # If we have fewer options than trajectories needed, repeat options
+                    repeat_count = (self.num_random_trajectories + self.num_options - 1) // self.num_options
+                    indices = np.tile(np.arange(self.num_options), repeat_count)[:self.num_random_trajectories]
+                else:
+                    # If we have more options than trajectories needed, sample without replacement
+                    indices = np.random.choice(self.num_options, size=self.num_random_trajectories, replace=False)
+
+                random_options = self.Z[indices]
             else:
-                random_options = np.random.randn(self.num_random_trajectories, self.dim_option)
-                if self.unit_length:
-                    random_options = random_options / np.linalg.norm(random_options, axis=1, keepdims=True)
+                if self.uniform_z:
+                    random_options = np.random.uniform(low=-1.0, high=1.0, size=(self.num_random_trajectories, self.dim_option))
+                else:
+                    random_options = np.random.randn(self.num_random_trajectories, self.dim_option)
+                    if self.unit_length:
+                        random_options = random_options / np.linalg.norm(random_options, axis=1, keepdims=True)
+
             random_option_colors = get_option_colors(random_options * 4)
 
         # Generate random trajectories based on random options

@@ -54,6 +54,8 @@ class IOD(RLAlgorithm):
             trans_optimization_epochs=None,
             discrete=False,
             unit_length=False,
+            use_discrete_set_of_cont_options=False,
+            num_options=None,
     ):
         self.env_name = env_name
         self.algo = algo
@@ -115,6 +117,20 @@ class IOD(RLAlgorithm):
 
         self.discrete = discrete
         self.unit_length = unit_length
+
+        self.use_discrete_set_of_cont_options = use_discrete_set_of_cont_options
+
+        if self.use_discrete_set_of_cont_options:
+            assert not self.discrete, "use_discrete_set_of_cont_options cannot be True when discrete is True"
+            assert num_options is not None, "num_options must be provided when use_discrete_set_of_cont_options is True"
+            self.num_options = num_options
+
+            # Generate a fixed set of normalized Gaussian vectors
+            self.Z = np.random.randn(self.num_options, self.dim_option)
+
+            # Normalize to unit length if required
+            if self.unit_length:
+                self.Z /= np.linalg.norm(self.Z, axis=1, keepdims=True)
 
         self.traj_encoder.eval()
 
