@@ -200,12 +200,14 @@ def make_env(args: argparse.Namespace, max_path_length: int) -> Any:
     elif args.env.startswith('dmc'):
         from envs.custom_dmc_tasks import dmc
         from envs.custom_dmc_tasks.pixel_wrappers import RenderWrapper
-        assert args.encoder  # Only support pixel-based environments
         if 'dmc_quadruped' in args.env:
             env = dmc.make('quadruped_run_forward_color', obs_type='states', frame_stack=1, action_repeat=2, seed=args.seed)
-            env = RenderWrapper(env)
+            if args.encoder:
+                env = RenderWrapper(env)
         elif 'dmc_humanoid' in args.env:
             env = dmc.make('humanoid_run_color', obs_type='states', frame_stack=1, action_repeat=2, seed=args.seed)
+            if args.encoder:
+                env = RenderWrapper(env)
             env = RenderWrapper(env)
         else:
             raise NotImplementedError
@@ -600,7 +602,8 @@ def run(ctxt=None):
     )
     traj_encoder = module_cls(**module_kwargs)
 
-    traj_encoder = TrajEncoderLayerwiseSkipConn(traj_encoder_obs_dim, output_dim)
+    if not args.encoder:
+        traj_encoder = TrajEncoderLayerwiseSkipConn(traj_encoder_obs_dim, output_dim)
 
     if args.encoder:
         if args.spectral_normalization:
