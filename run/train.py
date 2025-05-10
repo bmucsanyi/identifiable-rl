@@ -416,6 +416,7 @@ def get_argparser():
                         help="Use a fixed discrete set of continuous option vectors")
     parser.add_argument('--num_options', type=int, default=10,
                         help="Number of discrete option vectors to use when use_discrete_set_of_cont_options=1")
+    parser.add_argument('--use_skip_conn', type=int, default=0, choices=[0, 1])
 
     # DIAYN specific parameters
     parser.add_argument('--diayn_include_baseline', type=int, default=0, choices=[0, 1])
@@ -602,7 +603,7 @@ def run(ctxt=None):
     )
     traj_encoder = module_cls(**module_kwargs)
 
-    if not args.encoder:
+    if args.use_skip_conn:
         traj_encoder = TrajEncoderLayerwiseSkipConn(traj_encoder_obs_dim, output_dim)
 
     if args.encoder:
