@@ -416,7 +416,7 @@ def get_argparser():
                         help="Use a fixed discrete set of continuous option vectors")
     parser.add_argument('--num_options', type=int, default=10,
                         help="Number of discrete option vectors to use when use_discrete_set_of_cont_options=1")
-    parser.add_argument('--use_skip_conn', type=int, default=0, choices=[0, 1])
+    parser.add_argument('--use_skip_conn', type=int, default=1, choices=[0, 1])
 
     # DIAYN specific parameters
     parser.add_argument('--diayn_include_baseline', type=int, default=0, choices=[0, 1])
