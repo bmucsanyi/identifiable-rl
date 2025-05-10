@@ -617,7 +617,7 @@ def run(ctxt=None):
             te_encoder = None
         traj_encoder = with_encoder(traj_encoder, encoder=te_encoder)
 
-
+    print(traj_encoder, flush=True)
 
     # ********************
     # Setup dist predictor
