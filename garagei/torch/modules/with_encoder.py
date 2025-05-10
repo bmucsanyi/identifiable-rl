@@ -93,6 +93,95 @@ class Encoder(nn.Module):
         return output
 
 
+class CNNWithSkipConn(nn.Module):
+    def __init__(self, num_inputs, norm='none', channels_list=(32, 64, 128, 256), kernels_list=(4, 4, 4, 4),
+                 spectral_normalization=False):
+        super().__init__()
+
+        self._num_inputs = num_inputs
+        self._norm = norm
+        self._cnn_kernels = kernels_list
+
+        self._layers = nn.ModuleList()
+        self._norms = nn.ModuleList()
+        self._projections = nn.ModuleList()
+
+        prev_channels = num_inputs
+        for channels, kernel in zip(channels_list, self._cnn_kernels):
+            # Main convolutional layer
+            if spectral_normalization:
+                self._layers.append(spectral_norm(nn.Conv2d(prev_channels, channels, kernel, stride=2)))
+            else:
+                self._layers.append(nn.Conv2d(prev_channels, channels, kernel, stride=2))
+
+            # Normalization layer
+            self._norms.append(NormLayer(norm, channels))
+
+            # Projection for skip connection
+            self._projections.append(nn.Conv2d(prev_channels, channels, kernel, stride=2, bias=False))
+
+            prev_channels = channels
+
+    def forward(self, data):
+        x = data
+
+        for i in range(len(self._layers)):
+            identity = x
+
+            # Main path: Conv -> Norm -> LeakyReLU
+            x = self._layers[i](x)
+            x = self._norms[i](x)
+            x = torch.nn.functional.leaky_relu(x, negative_slope=0.25)
+
+            # Skip connection with projection
+            x = x + self._projections[i](identity)
+
+        return x.reshape(x.shape[0], -1)
+
+
+class EncoderWithSkipConn(nn.Module):
+    def __init__(
+            self,
+            pixel_shape,
+            spectral_normalization=False,
+            channels_list=(81,81),
+            kernels_list=(4,4),
+    ):
+        super().__init__()
+
+        self.pixel_shape = pixel_shape
+        self.pixel_dim = np.prod(pixel_shape)
+        self.pixel_depth = self.pixel_shape[-1]
+
+        self.encoder = CNNWithSkipConn(
+            self.pixel_depth,
+            spectral_normalization=spectral_normalization,
+            kernels_list=kernels_list,
+            channels_list=channels_list
+        )
+
+    def forward(self, input):
+        unsqueezed = len(input.shape) == 1
+        if unsqueezed:
+            input = input.unsqueeze(0)
+
+        assert len(input.shape) == 2
+
+        pixel = input[..., :self.pixel_dim].reshape(-1, *self.pixel_shape).permute(0, 3, 1, 2)
+        state = input[..., self.pixel_dim:]
+
+        pixel = pixel / 255.
+
+        rep = self.encoder(pixel)
+        rep = rep.reshape(rep.shape[0], -1)
+        output = torch.cat([rep, state], dim=-1)
+
+        if unsqueezed:
+            output = output.squeeze(0)
+
+        return output
+
+
 class WithEncoder(nn.Module):
     def __init__(
             self,

@@ -39,7 +39,7 @@ from garaged.src.garage.torch.modules import MLPModule
 from garagei.replay_buffer.path_buffer_ex import PathBufferEx
 from garagei.experiment.option_local_runner import OptionLocalRunner
 from garagei.sampler.option_multiprocessing_sampler import OptionMultiprocessingSampler
-from garagei.torch.modules.with_encoder import WithEncoder, Encoder
+from garagei.torch.modules.with_encoder import WithEncoder, Encoder, EncoderWithSkipConn
 from garagei.torch.modules.parameter_module import ParameterModule
 from garagei.torch.policies.policy_ex import PolicyEx
 from garagei.torch.q_functions.continuous_mlp_q_function_ex import ContinuousMLPQFunctionEx
@@ -417,6 +417,7 @@ def get_argparser():
     parser.add_argument('--num_options', type=int, default=10,
                         help="Number of discrete option vectors to use when use_discrete_set_of_cont_options=1")
     parser.add_argument('--use_skip_conn', type=int, default=1, choices=[0, 1])
+    parser.add_argument('--use_skip_conn_encoder', type=int, default=0, choices=[0, 1])
 
     # DIAYN specific parameters
     parser.add_argument('--diayn_include_baseline', type=int, default=0, choices=[0, 1])
@@ -519,7 +520,10 @@ def run(ctxt=None):
     # If using pixel-based environments, we need to know the obs dimension *after* encoding
     if args.encoder:
         def make_encoder(**kwargs):
-            return Encoder(pixel_shape=pixel_shape, **kwargs)
+            if args.use_skip_conn_encoder:
+                return EncoderWithSkipConn(pixel_shape=pixel_shape, **kwargs)
+            else:
+                return Encoder(pixel_shape=pixel_shape, **kwargs)
 
         def with_encoder(module, encoder=None):
             if encoder is None:
