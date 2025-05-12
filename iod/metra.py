@@ -660,6 +660,7 @@ class METRA(IOD):
 
         if log_dict:
             wandb.log(log_dict)
+            print(log_dict, flush=True)
 
         # Visualize trajectories
         with FigManager(runner, 'TrajPlot_RandomZ') as fm:

@@ -1093,7 +1093,9 @@ def run(ctxt=None):
     )
 
     if hasattr(algo, "Z"):
-        wandb.log({"Z_cond_num": np.linalg.cond(algo.Z).item()})
+        Z_cond_num = np.linalg.cond(algo.Z).item()
+        wandb.log({"Z_cond_num": Z_cond_num})
+        print("Z_cond_num", Z_cond_num)
 
     # Setup runner
     runner.setup(
