@@ -183,7 +183,7 @@ class OptionMultiprocessingSampler(MultiprocessingSampler):
             itertools.chain(*[log_data_list[i] for i in range(self._factory.n_workers)])
         )
 
-        if log_data_list:
+        if ordered_log_data_list:
             log_dict = process_log_data(ordered_log_data_list, ordered_trajectories)
         else:
             log_dict = {}
