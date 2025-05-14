@@ -166,10 +166,10 @@ class DefaultWorker(Worker):
 
         # Calculate disentanglement score if we have both ground-truth states
         # and encoder outputs
-        if len(self._ground_truth_states) > 0 and len(self._encoder_outputs) > 0:
+        if hasattr(self, "_deterministic_policy") and self._deterministic_policy and len(self._ground_truth_states) > 0 and len(self._encoder_outputs) > 0:
             # Convert lists to numpy arrays
-            ground_truth_matrix = np.stack(self._ground_truth_states, axis=0)
-            encoder_matrix = np.stack(self._encoder_outputs, axis=0)
+            ground_truth_matrix = np.stack(self._ground_truth_states, axis=0).astype(np.float64)
+            encoder_matrix = np.stack(self._encoder_outputs, axis=0).astype(np.float64)
 
             # Calculate linear disentanglement score
             r_square = linear_disentanglement(ground_truth_matrix, encoder_matrix, mode="r2").item()
@@ -178,6 +178,10 @@ class DefaultWorker(Worker):
             # Calculate differences between neighboring entries
             ground_truth_matrix_diff = ground_truth_matrix[1:] - ground_truth_matrix[:-1]
             encoder_matrix_diff = encoder_matrix[1:] - encoder_matrix[:-1]
+
+            print("=" * 50, flush=True)
+            print("mean", np.mean(ground_truth_matrix).item(), "std", np.std(ground_truth_matrix).item(), "min", np.min(ground_truth_matrix), "max", np.max(ground_truth_matrix), flush=True)
+            print("=" * 50, flush=True)
 
             # Calculate linear disentanglement score on differences
             r_square_diff = linear_disentanglement(ground_truth_matrix_diff, encoder_matrix_diff, mode="r2").item()
