@@ -625,24 +625,13 @@ class METRA(IOD):
                 random_option_colors.extend([cm.get_cmap(cmap)(colors[i])[:3]])
             random_option_colors = np.array(random_option_colors)
         else:
-            if self.use_discrete_set_of_cont_options:
-                # Handle evaluation sampling from discrete set
-                if self.num_options <= self.num_random_trajectories:
-                    # If we have fewer options than trajectories needed, repeat options
-                    repeat_count = (self.num_random_trajectories + self.num_options - 1) // self.num_options
-                    indices = np.tile(np.arange(self.num_options), repeat_count)[:self.num_random_trajectories]
-                else:
-                    # If we have more options than trajectories needed, sample without replacement
-                    indices = np.random.choice(self.num_options, size=self.num_random_trajectories, replace=False)
-
-                random_options = self.Z[indices]
+            # Always sample skills from a continuous set when self.discrete is False
+            if self.uniform_z:
+                random_options = np.random.uniform(low=-1.0, high=1.0, size=(self.num_random_trajectories, self.dim_option))
             else:
-                if self.uniform_z:
-                    random_options = np.random.uniform(low=-1.0, high=1.0, size=(self.num_random_trajectories, self.dim_option))
-                else:
-                    random_options = np.random.randn(self.num_random_trajectories, self.dim_option)
-                    if self.unit_length:
-                        random_options = random_options / np.linalg.norm(random_options, axis=1, keepdims=True)
+                random_options = np.random.randn(self.num_random_trajectories, self.dim_option)
+                if self.unit_length:
+                    random_options = random_options / np.linalg.norm(random_options, axis=1, keepdims=True)
 
             random_option_colors = get_option_colors(random_options * 4)
 
