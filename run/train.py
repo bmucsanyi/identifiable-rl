@@ -208,7 +208,6 @@ def make_env(args: argparse.Namespace, max_path_length: int) -> Any:
             env = dmc.make('humanoid_run_color', obs_type='states', frame_stack=1, action_repeat=2, seed=args.seed)
             if args.encoder:
                 env = RenderWrapper(env)
-            env = RenderWrapper(env)
         else:
             raise NotImplementedError
 
