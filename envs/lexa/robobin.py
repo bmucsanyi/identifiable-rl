@@ -16,6 +16,7 @@ class MyRoboBinEnv(RoboBinEnv):
             type='pixel',
             pixel_shape=(64, 64, 3),
         )
+        self.ground_truth_state = None
 
     @property
     def observation_space(self):
@@ -36,6 +37,7 @@ class MyRoboBinEnv(RoboBinEnv):
     def reset(self):
         obs_dict = super().reset()
         obs = self.get_state(obs_dict)
+        self.ground_truth_state = obs_dict['state'].copy()
         self.last_obs_dict = obs_dict
         self.last_obs = obs
         return obs
@@ -43,6 +45,7 @@ class MyRoboBinEnv(RoboBinEnv):
     def step(self, action, render=False):
         obs_dict, reward, done, info = super().step(action)
         obs = self.get_state(obs_dict)
+        self.ground_truth_state = obs_dict['state'].copy()
 
         # xyz of hand, obj1, and obj2
         coords = self.last_obs_dict['state'].copy()

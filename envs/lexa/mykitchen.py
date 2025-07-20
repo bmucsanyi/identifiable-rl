@@ -15,6 +15,7 @@ class MyKitchenEnv(KitchenEnv):
             type='pixel',
             pixel_shape=(64, 64, 3),
         )
+        self.ground_truth_state = None
 
     @property
     def observation_space(self):
@@ -27,6 +28,7 @@ class MyKitchenEnv(KitchenEnv):
     def reset(self):
         state = super().reset()
         ob = self.get_state(state)
+        self.ground_truth_state = state['state'].copy()
         self.last_state = state
         self.last_ob = ob
         return ob
@@ -34,6 +36,7 @@ class MyKitchenEnv(KitchenEnv):
     def step(self, action, render=False):
         next_state, reward, done, info = super().step(action)
         ob = self.get_state(next_state)
+        self.ground_truth_state = next_state['state'].copy()
 
         coords = self.last_state['state'][:2].copy()
         next_coords = next_state['state'][:2].copy()
