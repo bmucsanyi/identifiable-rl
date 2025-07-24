@@ -410,8 +410,13 @@ class OptionLocalRunner(LocalRunner):
         else:
             if agent_update is None:
                 agent_update = self._algo.policy[sampler_key].get_param_values()
-            if encoder_update is None:
-                encoder_update = self._algo.traj_encoder.state_dict()
+            # Don't automatically pass encoder during training - only when explicitly provided for evaluation
+            # This was causing the encoder to be active during training rollouts, leading to:
+            # 1. Identifiability computations during training (extra overhead)
+            # 2. Potential interference with learning
+            # The encoder should only be passed during evaluation via encoder_update=self._get_encoder_param_values()
+            # if encoder_update is None:
+            #     encoder_update = self._algo.traj_encoder.state_dict()
 
             if (
                 self._hanging_env_update[sampler_key] is not None
