@@ -179,10 +179,6 @@ class DefaultWorker(Worker):
             ground_truth_matrix_diff = ground_truth_matrix[1:] - ground_truth_matrix[:-1]
             encoder_matrix_diff = encoder_matrix[1:] - encoder_matrix[:-1]
 
-            print("=" * 50, flush=True)
-            print("mean", np.mean(ground_truth_matrix).item(), "std", np.std(ground_truth_matrix).item(), "min", np.min(ground_truth_matrix), "max", np.max(ground_truth_matrix), flush=True)
-            print("=" * 50, flush=True)
-
             # Calculate linear disentanglement score on differences
             r_square_diff = linear_disentanglement(ground_truth_matrix_diff, encoder_matrix_diff, mode="r2").item()
             pearson_diff = linear_disentanglement(ground_truth_matrix_diff, encoder_matrix_diff, mode="pearson").item()

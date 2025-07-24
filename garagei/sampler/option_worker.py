@@ -99,21 +99,22 @@ class OptionWorker(DefaultWorker):
         self._ground_truth_states = []
         self._encoder_outputs = []
 
-        # Store initial state
-        obs = self._prev_obs
-        if hasattr(self, 'obs_dim'):
-            obs = self._prev_obs[..., :self.obs_dim]
+        # Store initial state and encoder output only during evaluation
+        if hasattr(self, "_deterministic_policy") and self._deterministic_policy:
+            obs = self._prev_obs
+            if hasattr(self, 'obs_dim'):
+                obs = self._prev_obs[..., :self.obs_dim]
 
-        if hasattr(self.env, "ground_truth_state") and self.env.ground_truth_state is not None:
-            self._ground_truth_states.append(self.env.ground_truth_state)
-        else:
-            self._ground_truth_states.append(obs)
+            if hasattr(self.env, "ground_truth_state") and self.env.ground_truth_state is not None:
+                self._ground_truth_states.append(self.env.ground_truth_state)
+            else:
+                self._ground_truth_states.append(obs)
 
-        # Get encoder output if available
-        if self.encoder is not None:
-            with torch.no_grad():
-                initial_encoder_output = self.encoder(torch.from_numpy(obs)).mean.numpy()
-            self._encoder_outputs.append(initial_encoder_output)
+            # Get encoder output if available
+            if self.encoder is not None:
+                with torch.no_grad():
+                    initial_encoder_output = self.encoder(torch.from_numpy(obs)).mean.numpy()
+                self._encoder_outputs.append(initial_encoder_output)
 
     def step_rollout(self):
         """Take a single time-step in the current rollout.
@@ -156,33 +157,34 @@ class OptionWorker(DefaultWorker):
             else:
                 next_o, r, d, env_info = self.env.step(a)
 
-            # Record ground-truth state and encoder output
-            if self.goal_rep is not None:
-                # Extract state without goal
-                state = next_o[..., :next_o.shape[-1] // 2]
+            # Record ground-truth state and encoder output only during evaluation
+            if hasattr(self, "_deterministic_policy") and self._deterministic_policy:
+                if self.goal_rep is not None:
+                    # Extract state without goal
+                    state = next_o[..., :next_o.shape[-1] // 2]
 
-                if hasattr(self.env, "ground_truth_state") and self.env.ground_truth_state is not None:
-                    self._ground_truth_states.append(self.env.ground_truth_state)
+                    if hasattr(self.env, "ground_truth_state") and self.env.ground_truth_state is not None:
+                        self._ground_truth_states.append(self.env.ground_truth_state)
+                    else:
+                        self._ground_truth_states.append(state)
+
+                    # Get encoder representation if available
+                    if self.encoder is not None:
+                        with torch.no_grad():
+                            encoder_output = self.encoder(torch.from_numpy(state)).mean.numpy()
+                        self._encoder_outputs.append(encoder_output)
                 else:
-                    self._ground_truth_states.append(state)
+                    # Use full observation as state
+                    if hasattr(self.env, "ground_truth_state") and self.env.ground_truth_state is not None:
+                        self._ground_truth_states.append(self.env.ground_truth_state)
+                    else:
+                        self._ground_truth_states.append(next_o)
 
-                # Get encoder representation if available
-                if self.encoder is not None:
-                    with torch.no_grad():
-                        encoder_output = self.encoder(torch.from_numpy(state)).mean.numpy()
-                    self._encoder_outputs.append(encoder_output)
-            else:
-                # Use full observation as state
-                if hasattr(self.env, "ground_truth_state") and self.env.ground_truth_state is not None:
-                    self._ground_truth_states.append(self.env.ground_truth_state)
-                else:
-                    self._ground_truth_states.append(next_o)
-
-                # Get encoder representation if available
-                if self.encoder is not None:
-                    with torch.no_grad():
-                        encoder_output = self.encoder(torch.from_numpy(next_o)).mean.numpy()
-                    self._encoder_outputs.append(encoder_output)
+                    # Get encoder representation if available
+                    if self.encoder is not None:
+                        with torch.no_grad():
+                            encoder_output = self.encoder(torch.from_numpy(next_o)).mean.numpy()
+                        self._encoder_outputs.append(encoder_output)
 
             if self.goal_rep is not None:
                 self._observations.append(np.concatenate([self._prev_obs[..., :self.obs_dim], self.goal], axis=-1))
