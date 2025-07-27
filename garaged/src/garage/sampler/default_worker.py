@@ -3,6 +3,7 @@ from collections import defaultdict
 
 import gym
 import numpy as np
+import os
 
 from garage import TrajectoryBatch
 from garage.experiment import deterministic
@@ -171,19 +172,50 @@ class DefaultWorker(Worker):
             ground_truth_matrix = np.stack(self._ground_truth_states, axis=0).astype(np.float64)
             encoder_matrix = np.stack(self._encoder_outputs, axis=0).astype(np.float64)
 
-            # Calculate linear disentanglement score
-            r_square = linear_disentanglement(ground_truth_matrix, encoder_matrix, mode="r2").item()
-            pearson = linear_disentanglement(ground_truth_matrix, encoder_matrix, mode="pearson").item()
+            # Filter out constant dimensions before computing disentanglement
+            variance_threshold = 1e-8
+
+            # For absolute states
+            state_variance = np.var(ground_truth_matrix, axis=0)
+            active_dims = state_variance > variance_threshold
+
+            # Only compute if there are active dimensions
+            if np.sum(active_dims) > 0:
+                ground_truth_filtered = ground_truth_matrix[:, active_dims]
+                # Note: encoder matrix is not filtered - we want to see which encoder dims predict active GT dims
+                r_square = linear_disentanglement(ground_truth_filtered, encoder_matrix, mode="r2")
+                pearson = linear_disentanglement(ground_truth_filtered, encoder_matrix, mode="pearson")
+            else:
+                # No active dimensions - everything is constant
+                r_square = float('nan')
+                pearson = float('nan')
 
             # Calculate differences between neighboring entries
             ground_truth_matrix_diff = ground_truth_matrix[1:] - ground_truth_matrix[:-1]
             encoder_matrix_diff = encoder_matrix[1:] - encoder_matrix[:-1]
 
-            # Calculate linear disentanglement score on differences
-            r_square_diff = linear_disentanglement(ground_truth_matrix_diff, encoder_matrix_diff, mode="r2").item()
-            pearson_diff = linear_disentanglement(ground_truth_matrix_diff, encoder_matrix_diff, mode="pearson").item()
+            # Filter out constant dimensions in differences
+            diff_variance = np.var(ground_truth_matrix_diff, axis=0)
+            active_diff_dims = diff_variance > variance_threshold
 
-            log_dict = {"r_square": r_square, "r_square_diff": r_square_diff, "pearson": pearson, "pearson_diff": pearson_diff}
+            # Calculate linear disentanglement score on differences
+            if np.sum(active_diff_dims) > 0:
+                ground_truth_diff_filtered = ground_truth_matrix_diff[:, active_diff_dims]
+                # Note: encoder diff matrix is not filtered
+                r_square_diff = linear_disentanglement(ground_truth_diff_filtered, encoder_matrix_diff, mode="r2")
+                pearson_diff = linear_disentanglement(ground_truth_diff_filtered, encoder_matrix_diff, mode="pearson")
+            else:
+                # No active dimensions in differences
+                r_square_diff = float('nan')
+                pearson_diff = float('nan')
+
+            # Convert to Python floats for logging compatibility
+            log_dict = {
+                "r_square": float(r_square), 
+                "r_square_diff": float(r_square_diff), 
+                "pearson": float(pearson), 
+                "pearson_diff": float(pearson_diff)
+            }
         else:
             log_dict = {}
 

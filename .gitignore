@@ -2,6 +2,9 @@ slurm_output/
 figures/
 wandb/
 logs/
+*.npy
+debug_*
+test_*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
