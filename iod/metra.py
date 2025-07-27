@@ -647,9 +647,6 @@ class METRA(IOD):
             env_update=dict(_action_noise_std=None),
         )
 
-        if log_dict:
-            wandb.log(log_dict)
-            print(log_dict, flush=True)
 
         # Visualize trajectories
         with FigManager(runner, 'TrajPlot_RandomZ') as fm:
@@ -913,6 +910,17 @@ class METRA(IOD):
 
         # Logging
         eval_option_metrics.update(runner._env.calc_eval_metrics(random_trajectories, is_option_trajectories=True))
+        
+        # Combine log_dict from worker metrics with eval_option_metrics from environment
+        if log_dict:
+            # Add environment-specific metrics
+            if 'MjNumUniqueCoords' in eval_option_metrics:
+                log_dict['MjNumUniqueCoords'] = eval_option_metrics['MjNumUniqueCoords']
+            if 'KitchenOverall' in eval_option_metrics:
+                log_dict['KitchenOverall'] = eval_option_metrics['KitchenOverall']
+            wandb.log(log_dict)
+            print(log_dict, flush=True)
+        
         with global_context.GlobalContext({'phase': 'eval', 'policy': 'option'}):
             log_performance_ex(
                 runner.step_itr,
