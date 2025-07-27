@@ -105,9 +105,7 @@ class OptionLocalSampler(LocalSampler):
 
 def process_log_data(log_data_list, trajectories):
     r_squares = np.array([elem["r_square"] for elem in log_data_list])
-    r_square_diffs = np.array([elem["r_square_diff"] for elem in log_data_list])
     pearsons = np.array([elem["pearson"] for elem in log_data_list])
-    pearson_diffs = np.array([elem["pearson_diff"] for elem in log_data_list])
     returns = np.array([sum(elem.rewards) for elem in trajectories])
     returns_argmax = np.argmax(returns)
     returns_argmin = np.argmin(returns)
@@ -120,13 +118,6 @@ def process_log_data(log_data_list, trajectories):
         "r_square_std": np.std(r_squares),
         "r_square_for_max_return": r_squares[returns_argmax],
         "r_square_for_min_return": r_squares[returns_argmin],
-        # Record R^2 for phi(s) - phi(s')
-        "r_square_diff_min": np.min(r_square_diffs),
-        "r_square_diff_mean": np.mean(r_square_diffs),
-        "r_square_diff_max": np.max(r_square_diffs),
-        "r_square_diff_std": np.std(r_square_diffs),
-        "r_square_diff_for_max_return": r_square_diffs[returns_argmax],
-        "r_square_diff_for_min_return": r_square_diffs[returns_argmin],
         # Record Pearson for phi(s)
         "pearson_min": np.min(pearsons),
         "pearson_mean": np.mean(pearsons),
@@ -134,16 +125,47 @@ def process_log_data(log_data_list, trajectories):
         "pearson_std": np.std(pearsons),
         "pearson_for_max_return": pearsons[returns_argmax],
         "pearson_for_min_return": pearsons[returns_argmin],
-        # Record Pearson for phi(s) - phi(s')
-        "pearson_diff_min": np.min(pearson_diffs),
-        "pearson_diff_mean": np.mean(pearson_diffs),
-        "pearson_diff_max": np.max(pearson_diffs),
-        "pearson_diff_std": np.std(pearson_diffs),
-        "pearson_diff_for_max_return": pearson_diffs[returns_argmax],
-        "pearson_diff_for_min_return": pearson_diffs[returns_argmin],
         # Record max and min return
         "max_return": np.max(returns),
         "min_return": np.min(returns),
     }
+    
+    # Process multi-step differences (including step 1)
+    step_sizes = [1, 2, 3, 4, 5, 10, 20]
+    for step_size in step_sizes:
+        # R^2 for multi-step differences
+        key_r2 = f"r_square_diff_{step_size}_step"
+        key_pearson = f"pearson_diff_{step_size}_step"
+        
+        # Get values, using np.nan as default
+        r2_multi = np.array([elem.get(key_r2, np.nan) for elem in log_data_list])
+        pearson_multi = np.array([elem.get(key_pearson, np.nan) for elem in log_data_list])
+        
+        # Filter out NaN values for statistics
+        r2_valid = r2_multi[~np.isnan(r2_multi)]
+        pearson_valid = pearson_multi[~np.isnan(pearson_multi)]
+        
+        # Always add entries, use NaN when no valid data
+        if len(r2_valid) > 0:
+            log_dict[f"{key_r2}_min"] = np.min(r2_valid)
+            log_dict[f"{key_r2}_mean"] = np.mean(r2_valid)
+            log_dict[f"{key_r2}_max"] = np.max(r2_valid)
+            log_dict[f"{key_r2}_std"] = np.std(r2_valid)
+        else:
+            log_dict[f"{key_r2}_min"] = np.nan
+            log_dict[f"{key_r2}_mean"] = np.nan
+            log_dict[f"{key_r2}_max"] = np.nan
+            log_dict[f"{key_r2}_std"] = np.nan
+        
+        if len(pearson_valid) > 0:
+            log_dict[f"{key_pearson}_min"] = np.min(pearson_valid)
+            log_dict[f"{key_pearson}_mean"] = np.mean(pearson_valid)
+            log_dict[f"{key_pearson}_max"] = np.max(pearson_valid)
+            log_dict[f"{key_pearson}_std"] = np.std(pearson_valid)
+        else:
+            log_dict[f"{key_pearson}_min"] = np.nan
+            log_dict[f"{key_pearson}_mean"] = np.nan
+            log_dict[f"{key_pearson}_max"] = np.nan
+            log_dict[f"{key_pearson}_std"] = np.nan
 
     return log_dict

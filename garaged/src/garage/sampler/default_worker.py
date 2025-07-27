@@ -190,32 +190,35 @@ class DefaultWorker(Worker):
                 r_square = float('nan')
                 pearson = float('nan')
 
-            # Calculate differences between neighboring entries
-            ground_truth_matrix_diff = ground_truth_matrix[1:] - ground_truth_matrix[:-1]
-            encoder_matrix_diff = encoder_matrix[1:] - encoder_matrix[:-1]
-
-            # Filter out constant dimensions in differences
-            diff_variance = np.var(ground_truth_matrix_diff, axis=0)
-            active_diff_dims = diff_variance > variance_threshold
-
-            # Calculate linear disentanglement score on differences
-            if np.sum(active_diff_dims) > 0:
-                ground_truth_diff_filtered = ground_truth_matrix_diff[:, active_diff_dims]
-                # Note: encoder diff matrix is not filtered
-                r_square_diff = linear_disentanglement(ground_truth_diff_filtered, encoder_matrix_diff, mode="r2")
-                pearson_diff = linear_disentanglement(ground_truth_diff_filtered, encoder_matrix_diff, mode="pearson")
-            else:
-                # No active dimensions in differences
-                r_square_diff = float('nan')
-                pearson_diff = float('nan')
-
-            # Convert to Python floats for logging compatibility
+            # Calculate multi-step differences for dynamics assessment
             log_dict = {
-                "r_square": float(r_square), 
-                "r_square_diff": float(r_square_diff), 
-                "pearson": float(pearson), 
-                "pearson_diff": float(pearson_diff)
+                "r_square": float(r_square),
+                "pearson": float(pearson)
             }
+
+            # Test dynamics at multiple time scales
+            # Fine-grained for short-term dynamics, coarser for long-term
+            for step_size in [1, 2, 3, 4, 5, 10, 20]:
+                if len(ground_truth_matrix) > step_size:
+                    # Compute multi-step differences
+                    gt_diff = ground_truth_matrix[step_size:] - ground_truth_matrix[:-step_size]
+                    enc_diff = encoder_matrix[step_size:] - encoder_matrix[:-step_size]
+
+                    # Filter out constant dimensions
+                    diff_variance = np.var(gt_diff, axis=0)
+                    active_diff_dims = diff_variance > variance_threshold
+
+                    if np.sum(active_diff_dims) > 0:
+                        gt_diff_filtered = gt_diff[:, active_diff_dims]
+                        r2_diff = linear_disentanglement(gt_diff_filtered, enc_diff, mode="r2")
+                        pearson_diff = linear_disentanglement(gt_diff_filtered, enc_diff, mode="pearson")
+                    else:
+                        r2_diff = float('nan')
+                        pearson_diff = float('nan')
+
+                    # Add to log dict with consistent naming
+                    log_dict[f"r_square_diff_{step_size}_step"] = float(r2_diff)
+                    log_dict[f"pearson_diff_{step_size}_step"] = float(pearson_diff)
         else:
             log_dict = {}
 
