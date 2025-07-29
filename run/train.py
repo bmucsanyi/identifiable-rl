@@ -439,6 +439,16 @@ def get_argparser():
     parser.add_argument('--downstream_reward_type', type=str, default='esparse')
     parser.add_argument('--downstream_num_goal_steps', type=int, default=50)
     parser.add_argument('--policy_type', type=str, default='gaussian', choices=['gaussian', 'categorical'])
+    
+    # Replay buffer diagnostics
+    parser.add_argument('--rep_diag_every', type=int, default=0,
+                        help='Run rep diagnostics every N evals (0=disabled)')
+    parser.add_argument('--rep_diag_N', type=int, default=10000,
+                        help='Number of samples for rep diagnostics')
+    parser.add_argument('--dump_replay_every', type=int, default=0,
+                        help='Save replay buffer every N evals (0=disabled)')
+    parser.add_argument('--rep_joint_paths', type=str, nargs='*', default=None,
+                        help='Paths to saved .npz files for mixed R^2 analysis')
 
     # CIC specific parameters
     parser.add_argument('--cic_temp', type=float, default=0.5)
@@ -467,6 +477,9 @@ g_start_time = int(datetime.datetime.now().timestamp())
 
 @wrap_experiment(log_dir=get_log_dir(args, g_start_time, EXP_DIR), name=get_exp_name(args, g_start_time)[0])
 def run(ctxt=None):
+    # Get experiment name
+    exp_name = get_exp_name(args, g_start_time)[0]
+    
     # Print argparse arguments
     dowel.logger.log('ARGS: ' + str(args))
 
@@ -922,7 +935,11 @@ def run(ctxt=None):
         replay_buffer=replay_buffer,
         min_buffer_size=args.sac_min_buffer_size,
 
-        pixel_shape=pixel_shape
+        pixel_shape=pixel_shape,
+        rep_diag_every=args.rep_diag_every,
+        rep_diag_N=args.rep_diag_N,
+        dump_replay_every=args.dump_replay_every,
+        rep_joint_paths=args.rep_joint_paths,
     )
 
     # *****************************
@@ -930,6 +947,7 @@ def run(ctxt=None):
     # *****************************
     if args.algo == 'metra':
         algo_kwargs.update(
+            exp_name=exp_name,
             metra_mlp_rep=args.metra_mlp_rep,
             f_encoder=f_encoder,
             self_normalizing=args.self_normalizing,
@@ -963,6 +981,7 @@ def run(ctxt=None):
 
     elif args.algo == 'metra_sf':
         algo_kwargs.update(
+            exp_name=exp_name,
             metra_mlp_rep=args.metra_mlp_rep,
             f_encoder=f_encoder,
             self_normalizing=args.self_normalizing,
@@ -1038,6 +1057,7 @@ def run(ctxt=None):
 
     elif args.algo == 'dads':
         algo_kwargs.update(
+            exp_name=exp_name,
             metra_mlp_rep=args.metra_mlp_rep,
             f_encoder=f_encoder,
             self_normalizing=args.self_normalizing,
