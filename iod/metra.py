@@ -70,6 +70,12 @@ class METRA(IOD):
         exp_name: str = None,
         **kwargs,
     ):
+        # Extract our new parameters from kwargs
+        self.rep_diag_every = kwargs.pop('rep_diag_every', 0)
+        self.rep_diag_N = kwargs.pop('rep_diag_N', 10000)
+        self.dump_replay_every = kwargs.pop('dump_replay_every', 0)
+        self.rep_joint_paths = kwargs.pop('rep_joint_paths', None)
+        
         super().__init__(**kwargs)
 
         # Q networks
@@ -1115,18 +1121,16 @@ class METRA(IOD):
 
         # ---- Figure 2 diagnostics: current buffer ----
         try:
-            rep_diag_every = getattr(self, "rep_diag_every", 0)
-            if rep_diag_every > 0 and self._eval_counter % rep_diag_every == 0:
+            if self.rep_diag_every > 0 and self._eval_counter % self.rep_diag_every == 0:
                 self._rep_diagnostics(
-                    N=getattr(self, "rep_diag_N", 10_000), prefix="Rep"
+                    N=self.rep_diag_N, prefix="Rep"
                 )
         except Exception as e:
             print(f"[WARN] Rep diagnostics failed: {e}", flush=True)
 
         # ---- Optional: dump a replay shard from this run ----
         try:
-            k = int(getattr(self, "dump_replay_every", 0) or 0)
-            if k > 0 and (self._eval_counter % k == 0):
+            if self.dump_replay_every > 0 and (self._eval_counter % self.dump_replay_every == 0):
                 # Save to samples/<exp_name> directory
                 if self.exp_name:
                     dump_dir = os.path.join("samples", self.exp_name)
@@ -1136,7 +1140,7 @@ class METRA(IOD):
                     fname = f"replay_sample_eval{self._eval_counter}.npz"
                 path = os.path.join(dump_dir, fname)
                 ok = self._dump_replay_sample_npz(
-                    path, getattr(self, "rep_diag_N", 10_000)
+                    path, self.rep_diag_N
                 )
                 if not ok:
                     print("[WARN] Replay dump skipped (no data).", flush=True)
@@ -1145,13 +1149,12 @@ class METRA(IOD):
 
         # ---- Optional: joint diagnostics with external shards ----
         try:
-            ext_paths = getattr(self, "rep_joint_paths", None)
-            if ext_paths and rep_diag_every > 0 and (
-                self._eval_counter % rep_diag_every == 0
+            if self.rep_joint_paths and self.rep_diag_every > 0 and (
+                self._eval_counter % self.rep_diag_every == 0
             ):
                 self._rep_joint_diagnostics(
-                    N=getattr(self, "rep_diag_N", 10_000),
-                    paths=ext_paths,
+                    N=self.rep_diag_N,
+                    paths=self.rep_joint_paths,
                 )
         except Exception as e:
             print(f"[WARN] Joint diagnostics failed: {e}", flush=True)
