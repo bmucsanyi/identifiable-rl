@@ -1253,6 +1253,48 @@ class METRA(IOD):
                     title=f"{prefix}: Direction angles",
                     xlabel="Angle (radians)"
                 )
+    
+    @torch.no_grad()
+    def _compute_state_metrics(
+        self, state_diffs: torch.Tensor, prefix: str
+    ) -> None:
+        """
+        Save histogram visualizations to PDF for raw state differences.
+        state_diffs: [N, D] tensor of s' - s
+        """
+        sq = state_diffs.pow(2).sum(dim=-1)  # ||s' - s||^2
+        sq_np = sq.detach().cpu().numpy()
+        
+        # Save histogram as PDF
+        self._save_histogram(
+            sq_np, 
+            f"{prefix}_state_diff_sq",
+            title=f"{prefix}: ||s' - s||²",
+            xlabel="Squared L2 distance"
+        )
+
+        # Per-dimension histograms for Gaussianity check
+        for j in range(state_diffs.shape[1]):
+            diff_j_np = state_diffs[:, j].detach().cpu().numpy()
+            self._save_histogram(
+                diff_j_np,
+                f"{prefix}_state_diff_dim{j}",
+                title=f"{prefix}: s' - s dim {j}",
+                xlabel=f"s' - s (dim {j})"
+            )
+
+        # Angle histogram only in 2D
+        if state_diffs.shape[1] == 2:
+            unit = torch.nn.functional.normalize(state_diffs, dim=-1)
+            angles = (
+                torch.atan2(unit[:, 1], unit[:, 0]).detach().cpu().numpy()
+            )  # (-pi, pi]
+            self._save_histogram(
+                angles,
+                f"{prefix}_state_angles",
+                title=f"{prefix}: State Direction angles",
+                xlabel="Angle (radians)"
+            )
 
     @torch.no_grad()
     def _rep_diagnostics(self, N: int = 10_000, prefix: str = "Rep") -> None:
@@ -1268,7 +1310,7 @@ class METRA(IOD):
             return
             
         batch = min(self._trans_minibatch_size, N)
-        diffs, zs = [], []
+        diffs, zs, state_diffs = [], [], []
         total = 0
         while total < N:
             mb = self._sample_replay_buffer(batch_size=min(batch, N - total))
@@ -1276,12 +1318,17 @@ class METRA(IOD):
             phi_sp = self.traj_encoder(mb["next_obs"]).mean
             d = phi_sp - phi_s
             diffs.append(d)
+            # Collect state differences
+            state_d = mb["next_obs"] - mb["obs"]
+            state_diffs.append(state_d)
             if "options" in mb:
                 zs.append(mb["options"])
             total += d.shape[0]
         diffs = torch.cat(diffs, dim=0)[:N]
+        state_diffs = torch.cat(state_diffs, dim=0)[:N]
         zcat = torch.cat(zs, dim=0)[:N] if zs else None
         self._compute_rep_metrics(diffs, zcat, prefix)
+        self._compute_state_metrics(state_diffs, prefix)
 
     @torch.no_grad()
     def _dump_replay_sample_npz(
@@ -1354,7 +1401,7 @@ class METRA(IOD):
         ext_counts = [n_each] * S
         cur_count = N - n_each * S
 
-        diffs, zs = [], []
+        diffs, zs, state_diffs = [], [], []
 
         # Current buffer contribution
         if (
@@ -1374,6 +1421,9 @@ class METRA(IOD):
                     phi_sp = self.traj_encoder(mb["next_obs"]).mean
                     d = phi_sp - phi_s
                     diffs.append(d)
+                    # Collect state differences
+                    state_d = mb["next_obs"] - mb["obs"]
+                    state_diffs.append(state_d)
                     if "options" in mb:
                         zs.append(mb["options"])
                     remain -= d.shape[0]
@@ -1387,6 +1437,9 @@ class METRA(IOD):
             phi_sp = self.traj_encoder(nxt).mean
             d = phi_sp - phi_s
             diffs.append(d)
+            # Collect state differences from external shards
+            state_d = nxt - obs
+            state_diffs.append(state_d)
             if opt is not None:
                 zs.append(opt)
 
@@ -1394,5 +1447,7 @@ class METRA(IOD):
             return
 
         diffs = torch.cat(diffs, dim=0)[:N]
+        state_diffs = torch.cat(state_diffs, dim=0)[:N]
         zcat = torch.cat(zs, dim=0)[:N] if zs else None
         self._compute_rep_metrics(diffs, zcat, prefix="RepJoint")
+        self._compute_state_metrics(state_diffs, prefix="RepJoint")
