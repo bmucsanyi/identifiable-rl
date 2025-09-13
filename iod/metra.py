@@ -233,7 +233,7 @@ class METRA(IOD):
                     path[key] = cur_list
                 self.replay_buffer.add_path(path)
 
-    def _sample_replay_buffer(self, batch_size) -> Dict[str, torch.tensor]:
+    def _sample_replay_buffer(self, batch_size: int = None) -> Dict[str, torch.tensor]:
         """Sample batch of transitions from the replay buffer.
 
         Args:
