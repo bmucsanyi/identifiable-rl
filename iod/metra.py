@@ -1,31 +1,30 @@
 import copy
-from typing import Dict, List, Any
-from collections import defaultdict
-
-import numpy as np
 import os
+from collections import defaultdict
+from typing import Any, Dict, List
+
+import matplotlib.pyplot as plt
+import numpy as np
 import torch
 import wandb
+from garage import TrajectoryBatch
 from matplotlib import cm
-import matplotlib.pyplot as plt
 
 import global_context
-from garage import TrajectoryBatch
 from garagei import log_performance_ex
-from iod import sac_utils
-from iod.iod import IOD
+from garagei.experiment.option_local_runner import OptionLocalRunner
+from garagei.replay_buffer.path_buffer_ex import PathBufferEx
 from garagei.torch.q_functions.continuous_mlp_q_function_ex import (
     ContinuousMLPQFunctionEx,
 )
-from garagei.replay_buffer.path_buffer_ex import PathBufferEx
-from garagei.experiment.option_local_runner import OptionLocalRunner
-
+from iod import sac_utils
+from iod.iod import IOD
 from iod.utils import (
-    get_torch_concat_obs,
     FigManager,
-    get_option_colors,
-    record_video,
     draw_2d_gaussians,
+    get_option_colors,
+    get_torch_concat_obs,
+    record_video,
 )
 
 
@@ -71,11 +70,9 @@ class METRA(IOD):
         **kwargs,
     ):
         # Extract our new parameters from kwargs
-        self.rep_diag_every = kwargs.pop('rep_diag_every', 0)
-        self.rep_diag_N = kwargs.pop('rep_diag_N', 10000)
-        self.dump_replay_every = kwargs.pop('dump_replay_every', 0)
-        self.rep_joint_paths = kwargs.pop('rep_joint_paths', None)
-        
+        self.rep_diag_every = kwargs.pop("rep_diag_every", 0)
+        self.rep_diag_N = kwargs.pop("rep_diag_N", 10000)
+
         super().__init__(**kwargs)
 
         # Q networks
@@ -1121,43 +1118,13 @@ class METRA(IOD):
 
         # ---- Figure 2 diagnostics: current buffer ----
         try:
-            if self.rep_diag_every > 0 and self._eval_counter % self.rep_diag_every == 0:
-                self._rep_diagnostics(
-                    N=self.rep_diag_N, prefix="Rep"
-                )
+            if (
+                self.rep_diag_every > 0
+                and self._eval_counter % self.rep_diag_every == 0
+            ):
+                self._rep_diagnostics(N=self.rep_diag_N, prefix="Rep")
         except Exception as e:
             print(f"[WARN] Rep diagnostics failed: {e}", flush=True)
-
-        # ---- Optional: dump a replay shard from this run ----
-        try:
-            if self.dump_replay_every > 0 and (self._eval_counter % self.dump_replay_every == 0):
-                # Save to samples/<exp_name> directory
-                if self.exp_name:
-                    dump_dir = os.path.join("samples", self.exp_name)
-                    fname = f"replay_sample_eval{self._eval_counter}.npz"
-                else:
-                    dump_dir = os.path.join("samples", self.env_name)
-                    fname = f"replay_sample_eval{self._eval_counter}.npz"
-                path = os.path.join(dump_dir, fname)
-                ok = self._dump_replay_sample_npz(
-                    path, self.rep_diag_N
-                )
-                if not ok:
-                    print("[WARN] Replay dump skipped (no data).", flush=True)
-        except Exception as e:
-            print(f"[WARN] Replay dump failed: {e}", flush=True)
-
-        # ---- Optional: joint diagnostics with external shards ----
-        try:
-            if self.rep_joint_paths and self.rep_diag_every > 0 and (
-                self._eval_counter % self.rep_diag_every == 0
-            ):
-                self._rep_joint_diagnostics(
-                    N=self.rep_diag_N,
-                    paths=self.rep_joint_paths,
-                )
-        except Exception as e:
-            print(f"[WARN] Joint diagnostics failed: {e}", flush=True)
 
         # Logging
         eval_option_metrics.update(
@@ -1187,7 +1154,14 @@ class METRA(IOD):
             )
         self._log_eval_metrics(runner)
 
-    def _save_histogram(self, data: np.ndarray, filename: str, title: str = "", xlabel: str = "", bins: int = 50) -> None:
+    def _save_histogram(
+        self,
+        data: np.ndarray,
+        filename: str,
+        title: str = "",
+        xlabel: str = "",
+        bins: int = 50,
+    ) -> None:
         """Save histogram as PDF."""
         # Create histogram directory
         if self.exp_name:
@@ -1195,18 +1169,18 @@ class METRA(IOD):
         else:
             hist_dir = os.path.join("samples", self.env_name, "histograms")
         os.makedirs(hist_dir, exist_ok=True)
-        
+
         # Create the plot
         fig, ax = plt.subplots(figsize=(8, 6))
-        ax.hist(data, bins=bins, alpha=0.7, color='blue', edgecolor='black')
+        ax.hist(data, bins=bins, alpha=0.7, color="blue", edgecolor="black")
         ax.set_title(title)
         ax.set_xlabel(xlabel)
         ax.set_ylabel("Count")
         ax.grid(True, alpha=0.3)
-        
+
         # Save as PDF
         filepath = os.path.join(hist_dir, f"{filename}_eval{self._eval_counter}.pdf")
-        fig.savefig(filepath, format='pdf', bbox_inches='tight')
+        fig.savefig(filepath, format="pdf", bbox_inches="tight")
         plt.close(fig)
 
     @torch.no_grad()
@@ -1220,13 +1194,13 @@ class METRA(IOD):
         """
         sq = diffs.pow(2).sum(dim=-1)  # ||phi(s') - phi(s)||^2
         sq_np = sq.detach().cpu().numpy()
-        
+
         # Save histogram as PDF
         self._save_histogram(
-            sq_np, 
+            sq_np,
             f"{prefix}_phi_diff_sq",
             title=f"{prefix}: ||φ(s') - φ(s)||²",
-            xlabel="Squared L2 distance"
+            xlabel="Squared L2 distance",
         )
 
         # Residuals and angles only when semantically valid
@@ -1238,7 +1212,7 @@ class METRA(IOD):
                     resid_j_np,
                     f"{prefix}_residual_dim{j}",
                     title=f"{prefix}: Residual dim {j}",
-                    xlabel=f"φ(s') - φ(s) - z (dim {j})"
+                    xlabel=f"φ(s') - φ(s) - z (dim {j})",
                 )
 
             # Angle histogram only in 2D
@@ -1251,26 +1225,24 @@ class METRA(IOD):
                     angles,
                     f"{prefix}_angles",
                     title=f"{prefix}: Direction angles",
-                    xlabel="Angle (radians)"
+                    xlabel="Angle (radians)",
                 )
-    
+
     @torch.no_grad()
-    def _compute_state_metrics(
-        self, state_diffs: torch.Tensor, prefix: str
-    ) -> None:
+    def _compute_state_metrics(self, state_diffs: torch.Tensor, prefix: str) -> None:
         """
         Save histogram visualizations to PDF for raw state differences.
         state_diffs: [N, D] tensor of s' - s
         """
         sq = state_diffs.pow(2).sum(dim=-1)  # ||s' - s||^2
         sq_np = sq.detach().cpu().numpy()
-        
+
         # Save histogram as PDF
         self._save_histogram(
-            sq_np, 
+            sq_np,
             f"{prefix}_state_diff_sq",
             title=f"{prefix}: ||s' - s||²",
-            xlabel="Squared L2 distance"
+            xlabel="Squared L2 distance",
         )
 
         # Per-dimension histograms for Gaussianity check
@@ -1280,7 +1252,7 @@ class METRA(IOD):
                 diff_j_np,
                 f"{prefix}_state_diff_dim{j}",
                 title=f"{prefix}: s' - s dim {j}",
-                xlabel=f"s' - s (dim {j})"
+                xlabel=f"s' - s (dim {j})",
             )
 
         # Angle histogram only in 2D
@@ -1293,7 +1265,7 @@ class METRA(IOD):
                 angles,
                 f"{prefix}_state_angles",
                 title=f"{prefix}: State Direction angles",
-                xlabel="Angle (radians)"
+                xlabel="Angle (radians)",
             )
 
     @torch.no_grad()
@@ -1303,12 +1275,15 @@ class METRA(IOD):
         """
         if self.replay_buffer is None or self.replay_buffer.n_transitions_stored == 0:
             return
-        
+
         # Skip if not enough samples
         if self.replay_buffer.n_transitions_stored < N:
-            print(f"[WARN] Skipping {prefix} diagnostics: buffer has {self.replay_buffer.n_transitions_stored} < {N} requested samples", flush=True)
+            print(
+                f"[WARN] Skipping {prefix} diagnostics: buffer has {self.replay_buffer.n_transitions_stored} < {N} requested samples",
+                flush=True,
+            )
             return
-            
+
         batch = min(self._trans_minibatch_size, N)
         diffs, zs, state_diffs = [], [], []
         total = 0
@@ -1329,125 +1304,3 @@ class METRA(IOD):
         zcat = torch.cat(zs, dim=0)[:N] if zs else None
         self._compute_rep_metrics(diffs, zcat, prefix)
         self._compute_state_metrics(state_diffs, prefix)
-
-    @torch.no_grad()
-    def _dump_replay_sample_npz(
-        self, out_path: str, N: int, keys=("obs", "next_obs", "options")
-    ) -> bool:
-        """
-        Save a random sample of N transitions from the current replay buffer to a compressed .npz file.
-        """
-        if self.replay_buffer is None or self.replay_buffer.n_transitions_stored == 0:
-            return False
-            
-        # Skip if not enough samples
-        if self.replay_buffer.n_transitions_stored < N:
-            print(f"[WARN] Skipping replay dump: buffer has {self.replay_buffer.n_transitions_stored} < {N} requested samples", flush=True)
-            return False
-
-        batch = min(self._trans_minibatch_size, N)
-        stash = {k: [] for k in keys}
-        total = 0
-        while total < N:
-            mb = self._sample_replay_buffer(batch_size=min(batch, N - total))
-            # Drop absent keys gracefully (e.g., 'options' in some setups)
-            for k in list(stash.keys()):
-                if k not in mb:
-                    stash.pop(k)
-            for k in stash.keys():
-                stash[k].append(mb[k].detach().cpu().numpy())
-            total += next(iter(mb.values())).shape[0]
-
-        for k in stash.keys():
-            stash[k] = np.concatenate(stash[k], axis=0)[:N]
-
-        os.makedirs(os.path.dirname(out_path), exist_ok=True)
-        np.savez_compressed(out_path, **stash)
-        return True
-
-    @torch.no_grad()
-    def _sample_from_npz(self, path: str, count: int, device: torch.device = None):
-        """
-        Randomly sample 'count' rows from an external .npz shard.
-        Returns (obs, next_obs, options_or_None) as torch tensors on 'device'.
-        """
-        arr = np.load(path, mmap_mode="r")
-        assert "obs" in arr and "next_obs" in arr, f"{path} missing obs/next_obs"
-        N = arr["obs"].shape[0]
-        idx = np.random.randint(0, N, size=int(count))
-        dev = device or self.device
-        obs = torch.from_numpy(arr["obs"][idx]).to(dev).float()
-        nxt = torch.from_numpy(arr["next_obs"][idx]).to(dev).float()
-        opt = (
-            torch.from_numpy(arr["options"][idx]).to(dev).float()
-            if "options" in arr
-            else None
-        )
-        return obs, nxt, opt
-
-    @torch.no_grad()
-    def _rep_joint_diagnostics(self, N: int, paths: list) -> None:
-        """
-        Joint diagnostics over current replay + external shards.
-        Uses balanced sampling: takes ~N/(S+1) from each source.
-        """
-        paths = [p for p in (paths or []) if p]
-        if not paths:
-            return
-
-        S = len(paths)
-        # Balanced sampling
-        n_each = max(1, N // (S + 1))
-        ext_counts = [n_each] * S
-        cur_count = N - n_each * S
-
-        diffs, zs, state_diffs = [], [], []
-
-        # Current buffer contribution
-        if (
-            cur_count > 0
-            and self.replay_buffer is not None
-            and self.replay_buffer.n_transitions_stored > 0
-        ):
-            # Skip current buffer if not enough samples
-            if self.replay_buffer.n_transitions_stored < cur_count:
-                print(f"[WARN] Skipping current buffer in joint diagnostics: has {self.replay_buffer.n_transitions_stored} < {cur_count} requested samples", flush=True)
-            else:
-                remain = cur_count
-                batch = min(self._trans_minibatch_size, remain)
-                while remain > 0:
-                    mb = self._sample_replay_buffer(batch_size=min(batch, remain))
-                    phi_s = self.traj_encoder(mb["obs"]).mean
-                    phi_sp = self.traj_encoder(mb["next_obs"]).mean
-                    d = phi_sp - phi_s
-                    diffs.append(d)
-                    # Collect state differences
-                    state_d = mb["next_obs"] - mb["obs"]
-                    state_diffs.append(state_d)
-                    if "options" in mb:
-                        zs.append(mb["options"])
-                    remain -= d.shape[0]
-
-        # External shards
-        for p, cnt in zip(paths, ext_counts):
-            if cnt <= 0:
-                continue
-            obs, nxt, opt = self._sample_from_npz(p, cnt)
-            phi_s = self.traj_encoder(obs).mean
-            phi_sp = self.traj_encoder(nxt).mean
-            d = phi_sp - phi_s
-            diffs.append(d)
-            # Collect state differences from external shards
-            state_d = nxt - obs
-            state_diffs.append(state_d)
-            if opt is not None:
-                zs.append(opt)
-
-        if not diffs:
-            return
-
-        diffs = torch.cat(diffs, dim=0)[:N]
-        state_diffs = torch.cat(state_diffs, dim=0)[:N]
-        zcat = torch.cat(zs, dim=0)[:N] if zs else None
-        self._compute_rep_metrics(diffs, zcat, prefix="RepJoint")
-        self._compute_state_metrics(state_diffs, prefix="RepJoint")

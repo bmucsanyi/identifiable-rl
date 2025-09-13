@@ -5,6 +5,8 @@ logs/
 *.npy
 debug_*
 test_*
+analyze_*
+verify_*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
