@@ -1072,7 +1072,7 @@ class METRA(IOD):
             self.rep_diag_every > 0
             and self._eval_counter % self.rep_diag_every == 0
         ):
-            self._rep_diagnostics(N=self.rep_diag_N, prefix="Rep")
+            self._rep_diagnostics(N=self.rep_diag_N)
 
         # Logging
         eval_option_metrics.update(
@@ -1106,11 +1106,10 @@ class METRA(IOD):
         self,
         data: np.ndarray,
         filename: str,
-        title: str = "",
         xlabel: str = "",
         bins: int = 50,
     ) -> None:
-        """Save histogram as PDF."""
+        """Save histogram as PDF (no title)."""
         # Create histogram directory
         if self.exp_name:
             hist_dir = os.path.join("samples", self.exp_name, "histograms")
@@ -1121,7 +1120,6 @@ class METRA(IOD):
         # Create the plot
         fig, ax = plt.subplots(figsize=(8, 6))
         ax.hist(data, bins=bins, alpha=0.7, color="blue", edgecolor="black")
-        ax.set_title(title)
         ax.set_xlabel(xlabel)
         ax.set_ylabel("Count")
         ax.grid(True, alpha=0.3)
@@ -1133,7 +1131,7 @@ class METRA(IOD):
 
     @torch.no_grad()
     def _compute_rep_metrics(
-        self, diffs: torch.Tensor, zs: torch.Tensor, prefix: str
+        self, diffs: torch.Tensor, zs: torch.Tensor
     ) -> None:
         """
         Save histogram visualizations to PDF.
@@ -1146,9 +1144,8 @@ class METRA(IOD):
         # Save histogram as PDF
         self._save_histogram(
             sq_np,
-            f"{prefix}_phi_diff_sq",
-            title=f"{prefix}: ||φ(s') - φ(s)||²",
-            xlabel="Squared L2 distance",
+            "phi_diff_sq",
+            xlabel=r"$\|\phi(s')-\phi(s)\|^2$",
         )
 
         # Residuals and angles only when semantically valid
@@ -1158,9 +1155,8 @@ class METRA(IOD):
                 resid_j_np = resid[:, j].detach().cpu().numpy()
                 self._save_histogram(
                     resid_j_np,
-                    f"{prefix}_residual_dim{j}",
-                    title=f"{prefix}: Residual dim {j}",
-                    xlabel=f"φ(s') - φ(s) - z (dim {j})",
+                    f"residual_dim{j}",
+                    xlabel=rf"$\phi(s')-\phi(s)-z$ (dim {j})",
                 )
 
             # Angle histogram only in 2D
@@ -1171,8 +1167,7 @@ class METRA(IOD):
                 )  # (-pi, pi]
                 self._save_histogram(
                     angles,
-                    f"{prefix}_angles",
-                    title=f"{prefix}: Direction angles",
+                    "angles",
                     xlabel="Angle (radians)",
                 )
 
@@ -1214,7 +1209,7 @@ class METRA(IOD):
                 frob = torch.linalg.norm(S - lam_bar * eye).item()
                 U = frob / (np.sqrt(d) * max(lam_bar, 1e-12))
 
-                # ---- (T1) QQ plot: md2 vs. khi^2_d quantiles ----
+                # ---- (T1) QQ plot: md2 vs. chi^2_d quantiles ----
                 md2_sorted = torch.sort(md2).values.detach().cpu().numpy()
                 probs = (
                     np.arange(1, md2_sorted.shape[0] + 1) - 0.5
@@ -1233,11 +1228,10 @@ class METRA(IOD):
                 lim = [0, max(chi_q.max(), md2_sorted.max())]
                 ax.plot(lim, lim, "--", linewidth=1)
                 ax.set_xlabel(r"Theoretical $\chi^2_d$ quantiles")
-                ax.set_ylabel("Empirical Mahalanobis$^2$")
-                ax.set_title(f"{prefix}: Residual QQ plot (d={d}, n={n})")
+                ax.set_ylabel(rf"$(x-\mu)^\top \Sigma^{{-1}}(x-\mu)$ (n={n}, d={d})")
                 fig.savefig(
                     os.path.join(
-                        hist_dir, f"{prefix}_resid_qq_eval{self._eval_counter}.pdf"
+                        hist_dir, f"resid_qq_eval{self._eval_counter}.pdf"
                     ),
                     format="pdf",
                     bbox_inches="tight",
@@ -1247,14 +1241,14 @@ class METRA(IOD):
                 # Log the exact quantities needed
                 wandb.log(
                     {
-                        f"{prefix}/MardiaKurtosisZ": z_kurt,
-                        f"{prefix}/MardiaKurtosisP": p_kurt,
-                        f"{prefix}/SphericityU": U,
+                        "MardiaKurtosisZ": z_kurt,
+                        "MardiaKurtosisP": p_kurt,
+                        "SphericityU": U,
                     }
                 )
 
     @torch.no_grad()
-    def _rep_diagnostics(self, N: int = 10_000, prefix: str = "Rep") -> None:
+    def _rep_diagnostics(self, N: int = 10_000) -> None:
         """
         Current-buffer diagnostics: sample N transitions from self.replay_buffer.
         """
@@ -1264,7 +1258,7 @@ class METRA(IOD):
         # Skip if not enough samples
         if self.replay_buffer.n_transitions_stored < N:
             print(
-                f"[WARN] Skipping {prefix} diagnostics: buffer has {self.replay_buffer.n_transitions_stored} < {N} requested samples",
+                f"[WARN] Skipping diagnostics: buffer has {self.replay_buffer.n_transitions_stored} < {N} requested samples",
                 flush=True,
             )
             return
@@ -1283,4 +1277,4 @@ class METRA(IOD):
             total += d.shape[0]
         diffs = torch.cat(diffs, dim=0)[:N]
         zcat = torch.cat(zs, dim=0)[:N] if zs else None
-        self._compute_rep_metrics(diffs, zcat, prefix)
+        self._compute_rep_metrics(diffs, zcat)
