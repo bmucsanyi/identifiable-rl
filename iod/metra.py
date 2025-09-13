@@ -8,7 +8,6 @@ import numpy as np
 import torch
 import wandb
 from garage import TrajectoryBatch
-from matplotlib import cm
 
 import global_context
 from garagei import log_performance_ex
@@ -20,9 +19,6 @@ from garagei.torch.q_functions.continuous_mlp_q_function_ex import (
 from iod import sac_utils
 from iod.iod import IOD
 from iod.utils import (
-    FigManager,
-    draw_2d_gaussians,
-    get_option_colors,
     get_torch_concat_obs,
     record_video,
 )
@@ -710,7 +706,6 @@ class METRA(IOD):
         if self.discrete:
             eye_options = np.eye(self.dim_option)
             random_options = []
-            colors = []
             for i in range(self.dim_option):
                 num_trajs_per_option = (
                     self.num_random_trajectories // self.dim_option
@@ -718,16 +713,7 @@ class METRA(IOD):
                 )
                 for _ in range(num_trajs_per_option):
                     random_options.append(eye_options[i])
-                    colors.append(i)
             random_options = np.array(random_options)
-            colors = np.array(colors)
-            num_evals = len(random_options)
-
-            cmap = "tab10" if self.dim_option <= 10 else "tab20"
-            random_option_colors = []
-            for i in range(num_evals):
-                random_option_colors.extend([cm.get_cmap(cmap)(colors[i])[:3]])
-            random_option_colors = np.array(random_option_colors)
         else:
             # Always sample skills from a continuous set when self.discrete is False
             if self.uniform_z:
@@ -745,7 +731,6 @@ class METRA(IOD):
                         random_options, axis=1, keepdims=True
                     )
 
-            random_option_colors = get_option_colors(random_options * 4)
 
         # Generate random trajectories based on random options
         random_trajectories, log_dict = self._get_trajectories(
@@ -759,39 +744,7 @@ class METRA(IOD):
             env_update=dict(_action_noise_std=None),
         )
 
-        # Visualize trajectories
-        with FigManager(runner, "TrajPlot_RandomZ") as fm:
-            runner._env.render_trajectories(
-                random_trajectories, random_option_colors, self.eval_plot_axis, fm.ax
-            )
-
-        data = self.process_samples(random_trajectories)
-        last_obs = torch.stack(
-            [torch.from_numpy(ob[-1]).to(self.device) for ob in data["obs"]]
-        )
-
-        option_dists = self.traj_encoder(last_obs)
-
-        option_means = option_dists.mean.detach().cpu().numpy()
-        if self.inner:
-            option_stddevs = torch.ones_like(option_dists.stddev.detach().cpu()).numpy()
-        else:
-            option_stddevs = option_dists.stddev.detach().cpu().numpy()
-        option_samples = option_dists.mean.detach().cpu().numpy()
-
-        option_colors = random_option_colors
-
-        # Visualize last observation representation distribution
-        with FigManager(runner, f"PhiPlot") as fm:
-            draw_2d_gaussians(option_means, option_stddevs, option_colors, fm.ax)
-            draw_2d_gaussians(
-                option_samples,
-                [[0.03, 0.03]] * len(option_samples),
-                option_colors,
-                fm.ax,
-                fill=True,
-                use_adaptive_axis=True,
-            )
+        
 
         # Evaluate zero-shot goal reaching
         eval_option_metrics = {}

@@ -325,7 +325,7 @@ def get_argparser():
     parser.add_argument('--n_epochs_per_pkl_update', type=int, default=None)
     parser.add_argument('--num_random_trajectories', type=int, default=48)
     parser.add_argument('--num_video_repeats', type=int, default=2)
-    parser.add_argument('--eval_record_video', type=int, default=1)
+    parser.add_argument('--eval_record_video', type=int, default=0)
     parser.add_argument('--eval_plot_axis', type=float, default=None, nargs='*')
 
     # Preprocessing
