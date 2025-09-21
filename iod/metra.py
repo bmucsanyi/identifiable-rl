@@ -8,7 +8,8 @@ import numpy as np
 import torch
 import wandb
 from garage import TrajectoryBatch
-from torch.distributions import Chi2, Normal
+from torch.distributions import Normal
+from scipy.stats import chi2
 
 import global_context
 from garagei import log_performance_ex
@@ -1214,7 +1215,8 @@ class METRA(IOD):
                 probs = (
                     np.arange(1, md2_sorted.shape[0] + 1) - 0.5
                 ) / md2_sorted.shape[0]
-                chi_q = Chi2(d).icdf(torch.tensor(probs)).cpu().numpy()
+                probs_np = np.clip(probs, 1e-9, 1.0 - 1e-9)
+                chi_q = chi2.ppf(probs_np, d)
 
                 # Save QQ plot to the same histogram directory
                 if self.exp_name:
