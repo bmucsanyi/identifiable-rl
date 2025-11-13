@@ -743,6 +743,7 @@ class METRA(IOD):
                 _render=False,
                 _deterministic_policy=True,
                 _sac_states_dir=self.load_sac_states_dir,
+                _env_name=self.env_name,
             ),
             env_update=dict(_action_noise_std=None),
         )
