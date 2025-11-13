@@ -1052,6 +1052,9 @@ def run(ctxt=None):
             joint_train=args.joint_train,
         )
     elif args.algo == 'sac':
+        # rep diagnostics are METRA-specific; avoid passing to vanilla SAC
+        skill_common_args.pop('rep_diag_every', None)
+        skill_common_args.pop('rep_diag_N', None)
         algo_kwargs.update(
             use_discrete_sac=args.use_discrete_sac,
             save_all_states=args.save_all_states,
