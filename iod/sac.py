@@ -212,7 +212,7 @@ class SAC(IOD):
         )
 
     def _evaluate_policy(self, runner, **kwargs):
-        random_trajectories = self._get_trajectories(
+        random_trajectories, _ = self._get_trajectories(
             runner,
             sampler_key='option_policy',
             extras=[{} for _ in range(self.num_random_trajectories)],
