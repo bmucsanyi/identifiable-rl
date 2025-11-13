@@ -4,7 +4,7 @@ from collections import defaultdict
 import gym
 import numpy as np
 import os
-
+import torch
 from garage import TrajectoryBatch
 from garage.experiment import deterministic
 from garage.sampler.env_update import EnvUpdate
@@ -246,10 +246,6 @@ class DefaultWorker(Worker):
 
     def _evaluate_on_sac_states(self):
         """Evaluate encoder on saved SAC states with exact same metrics as rollout evaluation."""
-        import os
-        import torch
-        from iod.disentanglement import linear_disentanglement
-
         log_dict = {}
 
         if not os.path.exists(self._sac_states_dir):
@@ -263,6 +259,12 @@ class DefaultWorker(Worker):
         if self.encoder is None:
             return log_dict
 
+        # Get current evaluation states for covered/uncovered partitioning
+        metra_states = None
+        metra_unique_set = None
+        if len(self._ground_truth_states) > 0:
+            metra_states = np.stack(self._ground_truth_states, axis=0)
+
         # Evaluate on ALL saved state files for maximum flexibility during rebuttal
         for state_file in state_files:
             state_filepath = os.path.join(self._sac_states_dir, state_file)
@@ -273,12 +275,11 @@ class DefaultWorker(Worker):
             # Extract step number from filename (e.g., states_10000.npz -> 10000)
             step_str = state_file.replace('states_', '').replace('.npz', '')
 
-            model_obs_torch = torch.from_numpy(model_obs).float()
-            if hasattr(self, '_device'):
-                model_obs_torch = model_obs_torch.to(self._device)
+            # Encoder is on CPU (set in update_encoder), so keep inputs on CPU too
+            model_obs_torch = torch.from_numpy(model_obs).float().cpu()
 
             with torch.no_grad():
-                encoder_outputs = self.encoder(model_obs_torch).mean.cpu().numpy()
+                encoder_outputs = self.encoder(model_obs_torch).mean.numpy()
 
             ground_truth_matrix = ground_truth_obs.astype(np.float64)
             encoder_matrix = encoder_outputs.astype(np.float64)
@@ -287,6 +288,7 @@ class DefaultWorker(Worker):
             state_variance = np.var(ground_truth_matrix, axis=0)
             active_dims = state_variance > variance_threshold
 
+            # Compute metrics for all SAC states
             if np.sum(active_dims) > 0:
                 ground_truth_filtered = ground_truth_matrix[:, active_dims]
                 r_square = linear_disentanglement(ground_truth_filtered, encoder_matrix, mode="r2")
@@ -316,6 +318,124 @@ class DefaultWorker(Worker):
 
                     log_dict[f"r_square_diff_{step_size}_step_sac_{step_str}"] = float(r2_diff)
                     log_dict[f"pearson_diff_{step_size}_step_sac_{step_str}"] = float(pearson_diff)
+
+            # Partition SAC states into covered and uncovered
+            # Always log all metrics with NaN placeholders if conditions don't apply
+            if metra_states is not None and np.sum(active_dims) > 0:
+                # Discretize states using active dimensions with 2 decimals (like MjNumUniqueCoords)
+                decimals = 2
+                sac_discretized = np.round(ground_truth_matrix[:, active_dims], decimals=decimals)
+                metra_discretized = np.round(metra_states[:, active_dims], decimals=decimals)
+
+                # Build set of unique METRA evaluation states
+                metra_unique_set = set(map(tuple, metra_discretized))
+
+                # Partition SAC states
+                covered_mask = np.array([tuple(s) in metra_unique_set for s in sac_discretized])
+                uncovered_mask = ~covered_mask
+
+                num_covered = np.sum(covered_mask)
+                num_uncovered = np.sum(uncovered_mask)
+            else:
+                num_covered = 0
+                num_uncovered = 0
+                covered_mask = None
+                uncovered_mask = None
+
+            log_dict[f"num_covered_states_sac_{step_str}"] = int(num_covered)
+            log_dict[f"num_uncovered_states_sac_{step_str}"] = int(num_uncovered)
+
+            # Compute metrics for covered states
+            if num_covered > 0:
+                ground_truth_covered = ground_truth_matrix[covered_mask]
+                encoder_covered = encoder_matrix[covered_mask]
+
+                # Recompute active dimensions for covered subset
+                covered_state_variance = np.var(ground_truth_covered, axis=0)
+                covered_active_dims = covered_state_variance > variance_threshold
+
+                if np.sum(covered_active_dims) > 0:
+                    ground_truth_covered_filtered = ground_truth_covered[:, covered_active_dims]
+                    r_square_covered = linear_disentanglement(ground_truth_covered_filtered, encoder_covered, mode="r2")
+                    pearson_covered = linear_disentanglement(ground_truth_covered_filtered, encoder_covered, mode="pearson")
+                else:
+                    r_square_covered = float('nan')
+                    pearson_covered = float('nan')
+            else:
+                r_square_covered = float('nan')
+                pearson_covered = float('nan')
+
+            log_dict[f"r_square_sac_covered_{step_str}"] = float(r_square_covered)
+            log_dict[f"pearson_sac_covered_{step_str}"] = float(pearson_covered)
+
+            # Multi-step dynamics for covered states
+            for step_size in [1, 2, 3, 4, 5, 10, 20]:
+                if num_covered > 0 and len(ground_truth_covered) > step_size:
+                    gt_diff_covered = ground_truth_covered[step_size:] - ground_truth_covered[:-step_size]
+                    enc_diff_covered = encoder_covered[step_size:] - encoder_covered[:-step_size]
+
+                    covered_diff_variance = np.var(gt_diff_covered, axis=0)
+                    covered_active_diff_dims = covered_diff_variance > variance_threshold
+
+                    if np.sum(covered_active_diff_dims) > 0:
+                        gt_diff_covered_filtered = gt_diff_covered[:, covered_active_diff_dims]
+                        r2_diff_covered = linear_disentanglement(gt_diff_covered_filtered, enc_diff_covered, mode="r2")
+                        pearson_diff_covered = linear_disentanglement(gt_diff_covered_filtered, enc_diff_covered, mode="pearson")
+                    else:
+                        r2_diff_covered = float('nan')
+                        pearson_diff_covered = float('nan')
+                else:
+                    r2_diff_covered = float('nan')
+                    pearson_diff_covered = float('nan')
+
+                log_dict[f"r_square_diff_{step_size}_step_sac_covered_{step_str}"] = float(r2_diff_covered)
+                log_dict[f"pearson_diff_{step_size}_step_sac_covered_{step_str}"] = float(pearson_diff_covered)
+
+            # Compute metrics for uncovered states (tests generalization)
+            if num_uncovered > 0:
+                ground_truth_uncovered = ground_truth_matrix[uncovered_mask]
+                encoder_uncovered = encoder_matrix[uncovered_mask]
+
+                # Recompute active dimensions for uncovered subset
+                uncovered_state_variance = np.var(ground_truth_uncovered, axis=0)
+                uncovered_active_dims = uncovered_state_variance > variance_threshold
+
+                if np.sum(uncovered_active_dims) > 0:
+                    ground_truth_uncovered_filtered = ground_truth_uncovered[:, uncovered_active_dims]
+                    r_square_uncovered = linear_disentanglement(ground_truth_uncovered_filtered, encoder_uncovered, mode="r2")
+                    pearson_uncovered = linear_disentanglement(ground_truth_uncovered_filtered, encoder_uncovered, mode="pearson")
+                else:
+                    r_square_uncovered = float('nan')
+                    pearson_uncovered = float('nan')
+            else:
+                r_square_uncovered = float('nan')
+                pearson_uncovered = float('nan')
+
+            log_dict[f"r_square_sac_uncovered_{step_str}"] = float(r_square_uncovered)
+            log_dict[f"pearson_sac_uncovered_{step_str}"] = float(pearson_uncovered)
+
+            # Multi-step dynamics for uncovered states
+            for step_size in [1, 2, 3, 4, 5, 10, 20]:
+                if num_uncovered > 0 and len(ground_truth_uncovered) > step_size:
+                    gt_diff_uncovered = ground_truth_uncovered[step_size:] - ground_truth_uncovered[:-step_size]
+                    enc_diff_uncovered = encoder_uncovered[step_size:] - encoder_uncovered[:-step_size]
+
+                    uncovered_diff_variance = np.var(gt_diff_uncovered, axis=0)
+                    uncovered_active_diff_dims = uncovered_diff_variance > variance_threshold
+
+                    if np.sum(uncovered_active_diff_dims) > 0:
+                        gt_diff_uncovered_filtered = gt_diff_uncovered[:, uncovered_active_diff_dims]
+                        r2_diff_uncovered = linear_disentanglement(gt_diff_uncovered_filtered, enc_diff_uncovered, mode="r2")
+                        pearson_diff_uncovered = linear_disentanglement(gt_diff_uncovered_filtered, enc_diff_uncovered, mode="pearson")
+                    else:
+                        r2_diff_uncovered = float('nan')
+                        pearson_diff_uncovered = float('nan')
+                else:
+                    r2_diff_uncovered = float('nan')
+                    pearson_diff_uncovered = float('nan')
+
+                log_dict[f"r_square_diff_{step_size}_step_sac_uncovered_{step_str}"] = float(r2_diff_uncovered)
+                log_dict[f"pearson_diff_{step_size}_step_sac_uncovered_{step_str}"] = float(pearson_diff_uncovered)
 
         return log_dict
 
