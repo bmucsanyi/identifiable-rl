@@ -446,6 +446,16 @@ def get_argparser():
     parser.add_argument('--rep_diag_N', type=int, default=10000,
                         help='Number of samples for rep diagnostics')
 
+    # State saving for SAC (for offline encoder evaluation)
+    parser.add_argument('--save_all_states', type=int, default=0, choices=[0, 1],
+                        help='Save all states during SAC training for offline encoder evaluation')
+    parser.add_argument('--save_states_period', type=int, default=10000,
+                        help='Save states every N environment steps')
+    parser.add_argument('--save_states_subsample_size', type=int, default=10000,
+                        help='Subsample size k for saved states')
+    parser.add_argument('--load_sac_states_dir', type=str, default=None,
+                        help='Directory containing SAC state saves for encoder evaluation')
+
     # CIC specific parameters
     parser.add_argument('--cic_temp', type=float, default=0.5)
     parser.add_argument('--cic_alpha', type=float, default=1.0)
@@ -961,6 +971,7 @@ def run(ctxt=None):
             diayn_include_baseline=args.diayn_include_baseline,
             uniform_z=args.uniform_z,
             num_zero_shot_goals=args.num_zero_shot_goals,
+            load_sac_states_dir=args.load_sac_states_dir,
         )
         skill_common_args.update(
             inner=args.inner,
@@ -995,6 +1006,7 @@ def run(ctxt=None):
             diayn_include_baseline=args.diayn_include_baseline,
             uniform_z=args.uniform_z,
             num_zero_shot_goals=args.num_zero_shot_goals,
+            load_sac_states_dir=args.load_sac_states_dir,
         )
         skill_common_args.update(
             inner=args.inner,
@@ -1042,6 +1054,9 @@ def run(ctxt=None):
     elif args.algo == 'sac':
         algo_kwargs.update(
             use_discrete_sac=args.use_discrete_sac,
+            save_all_states=args.save_all_states,
+            save_states_period=args.save_states_period,
+            save_states_subsample_size=args.save_states_subsample_size,
         )
 
         algo = SAC(

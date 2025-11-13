@@ -29,6 +29,7 @@ class OptionWorker(DefaultWorker):
         self._deterministic_policy = None
         self._ground_truth_states = []
         self._encoder_outputs = []
+        self._sac_states_dir = None
 
     def update_env(self, env_update):
         if env_update is not None:

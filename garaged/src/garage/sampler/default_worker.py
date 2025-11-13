@@ -222,6 +222,11 @@ class DefaultWorker(Worker):
         else:
             log_dict = {}
 
+        # Evaluate on SAC states if available
+        if hasattr(self, "_deterministic_policy") and self._deterministic_policy and hasattr(self, "_sac_states_dir") and self._sac_states_dir is not None:
+            sac_log_dict = self._evaluate_on_sac_states()
+            log_dict.update(sac_log_dict)
+
         # Clear the lists
         self._ground_truth_states = []
         self._encoder_outputs = []
@@ -238,6 +243,81 @@ class DefaultWorker(Worker):
                                np.asarray(terminals), dict(env_infos),
                                dict(agent_infos), np.asarray(lengths,
                                                              dtype='i')), log_dict
+
+    def _evaluate_on_sac_states(self):
+        """Evaluate encoder on saved SAC states with exact same metrics as rollout evaluation."""
+        import os
+        import torch
+        from iod.disentanglement import linear_disentanglement
+
+        log_dict = {}
+
+        if not os.path.exists(self._sac_states_dir):
+            return log_dict
+
+        state_files = sorted([f for f in os.listdir(self._sac_states_dir) if f.startswith('states_') and f.endswith('.npz')])
+
+        if not state_files:
+            return log_dict
+
+        if self.encoder is None:
+            return log_dict
+
+        # Evaluate on ALL saved state files for maximum flexibility during rebuttal
+        for state_file in state_files:
+            state_filepath = os.path.join(self._sac_states_dir, state_file)
+            data = np.load(state_filepath)
+            model_obs = data['model_obs']
+            ground_truth_obs = data['ground_truth_obs']
+
+            # Extract step number from filename (e.g., states_10000.npz -> 10000)
+            step_str = state_file.replace('states_', '').replace('.npz', '')
+
+            model_obs_torch = torch.from_numpy(model_obs).float()
+            if hasattr(self, '_device'):
+                model_obs_torch = model_obs_torch.to(self._device)
+
+            with torch.no_grad():
+                encoder_outputs = self.encoder(model_obs_torch).mean.cpu().numpy()
+
+            ground_truth_matrix = ground_truth_obs.astype(np.float64)
+            encoder_matrix = encoder_outputs.astype(np.float64)
+
+            variance_threshold = 1e-8
+            state_variance = np.var(ground_truth_matrix, axis=0)
+            active_dims = state_variance > variance_threshold
+
+            if np.sum(active_dims) > 0:
+                ground_truth_filtered = ground_truth_matrix[:, active_dims]
+                r_square = linear_disentanglement(ground_truth_filtered, encoder_matrix, mode="r2")
+                pearson = linear_disentanglement(ground_truth_filtered, encoder_matrix, mode="pearson")
+            else:
+                r_square = float('nan')
+                pearson = float('nan')
+
+            log_dict[f"r_square_sac_{step_str}"] = float(r_square)
+            log_dict[f"pearson_sac_{step_str}"] = float(pearson)
+
+            for step_size in [1, 2, 3, 4, 5, 10, 20]:
+                if len(ground_truth_matrix) > step_size:
+                    gt_diff = ground_truth_matrix[step_size:] - ground_truth_matrix[:-step_size]
+                    enc_diff = encoder_matrix[step_size:] - encoder_matrix[:-step_size]
+
+                    diff_variance = np.var(gt_diff, axis=0)
+                    active_diff_dims = diff_variance > variance_threshold
+
+                    if np.sum(active_diff_dims) > 0:
+                        gt_diff_filtered = gt_diff[:, active_diff_dims]
+                        r2_diff = linear_disentanglement(gt_diff_filtered, enc_diff, mode="r2")
+                        pearson_diff = linear_disentanglement(gt_diff_filtered, enc_diff, mode="pearson")
+                    else:
+                        r2_diff = float('nan')
+                        pearson_diff = float('nan')
+
+                    log_dict[f"r_square_diff_{step_size}_step_sac_{step_str}"] = float(r2_diff)
+                    log_dict[f"pearson_diff_{step_size}_step_sac_{step_str}"] = float(pearson_diff)
+
+        return log_dict
 
     def rollout(self):
         """Sample a single rollout of the agent in the environment.

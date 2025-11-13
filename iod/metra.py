@@ -70,6 +70,7 @@ class METRA(IOD):
         # Extract our new parameters from kwargs
         self.rep_diag_every = kwargs.pop("rep_diag_every", 0)
         self.rep_diag_N = kwargs.pop("rep_diag_N", 10000)
+        self.load_sac_states_dir = kwargs.pop("load_sac_states_dir", None)
 
         super().__init__(**kwargs)
 
@@ -741,6 +742,7 @@ class METRA(IOD):
             worker_update=dict(
                 _render=False,
                 _deterministic_policy=True,
+                _sac_states_dir=self.load_sac_states_dir,
             ),
             env_update=dict(_action_noise_std=None),
         )

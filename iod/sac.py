@@ -26,6 +26,9 @@ class SAC(IOD):
 
             pixel_shape=None,
             use_discrete_sac: bool = False,
+            save_all_states: bool = False,
+            save_states_period: int = 10000,
+            save_states_subsample_size: int = 10000,
 
             **kwargs,
     ):
@@ -59,6 +62,15 @@ class SAC(IOD):
             self._target_entropy = -np.prod(self._env_spec.action_space.shape).item() / 2. * target_coef
 
         self.pixel_shape = pixel_shape
+
+        self.save_all_states = save_all_states
+        self.save_states_period = save_states_period
+        self.save_states_subsample_size = save_states_subsample_size
+
+        if self.save_all_states:
+            self._accumulated_model_obs = []
+            self._accumulated_ground_truth_obs = []
+            self._next_save_step = self.save_states_period
 
     @property
     def policy(self):
@@ -102,6 +114,9 @@ class SAC(IOD):
         return data
 
     def _train_once_inner(self, path_data):
+        if self.save_all_states:
+            self._accumulate_states(path_data)
+
         self._update_replay_buffer(path_data)
 
         epoch_data = self._flatten_data(path_data)
@@ -109,6 +124,19 @@ class SAC(IOD):
         tensors = self._train_components(epoch_data)
 
         return tensors
+
+    def _accumulate_states(self, path_data):
+        for i in range(len(path_data['obs'])):
+            model_obs = path_data['obs'][i]
+
+            if 'ori_obs' in path_data:
+                ground_truth_obs = path_data['ori_obs'][i]
+            else:
+                ground_truth_obs = model_obs
+
+            for t in range(len(model_obs)):
+                self._accumulated_model_obs.append(model_obs[t])
+                self._accumulated_ground_truth_obs.append(ground_truth_obs[t])
 
     def _train_components(self, epoch_data):
         if self.replay_buffer is not None and self.replay_buffer.n_transitions_stored < self.min_buffer_size:

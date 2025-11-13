@@ -505,6 +505,12 @@ class OptionLocalRunner(LocalRunner):
             # XXX: Assume that env_infos always contains 2D coordinates.
             self._stats.total_env_steps += sum([len(p["rewards"]) for p in paths])
 
+            # Check if we need to save accumulated states
+            if hasattr(self._algo, 'save_all_states') and self._algo.save_all_states:
+                if self._stats.total_env_steps >= self._algo._next_save_step:
+                    self._save_accumulated_states()
+                    self._algo._next_save_step += self._algo.save_states_period
+
         return paths, infos, log_dict
 
     def step_epochs(
@@ -622,3 +628,31 @@ class OptionLocalRunner(LocalRunner):
             dowel_wrapper.get_logger("plot").log(dowel_wrapper.get_tabular("plot"))
             dowel_wrapper.get_logger("plot").dump_all(self.step_itr)
             dowel_wrapper.get_tabular("plot").clear()
+
+    def _save_accumulated_states(self):
+        algo = self._algo
+        n_total = len(algo._accumulated_model_obs)
+
+        if n_total == 0:
+            logger.log(f"No states accumulated yet, skipping save at step {self._stats.total_env_steps}")
+            return
+
+        k = min(algo.save_states_subsample_size, n_total)
+        indices = np.random.choice(n_total, k, replace=False)
+
+        model_obs = np.array([algo._accumulated_model_obs[i] for i in indices])
+        ground_truth_obs = np.array([algo._accumulated_ground_truth_obs[i] for i in indices])
+
+        save_dir = os.path.join(self._snapshotter._snapshot_dir, 'state_saves')
+        os.makedirs(save_dir, exist_ok=True)
+        filepath = os.path.join(save_dir, f'states_{self._stats.total_env_steps}.npz')
+
+        np.savez(
+            filepath,
+            model_obs=model_obs,
+            ground_truth_obs=ground_truth_obs,
+            step=self._stats.total_env_steps,
+            n_samples=k,
+        )
+
+        logger.log(f"Saved {k} states (subsampled from {n_total}) to {filepath}")
