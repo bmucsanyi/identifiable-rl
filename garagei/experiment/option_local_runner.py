@@ -637,11 +637,10 @@ class OptionLocalRunner(LocalRunner):
             logger.log(f"No states accumulated yet, skipping save at step {self._stats.total_env_steps}")
             return
 
-        k = min(algo.save_states_subsample_size, n_total)
-        indices = np.random.choice(n_total, k, replace=False)
-
-        model_obs = np.array([algo._accumulated_model_obs[i] for i in indices])
-        ground_truth_obs = np.array([algo._accumulated_ground_truth_obs[i] for i in indices])
+        # States are already probabilistically sampled in _accumulate_states
+        # Just save them all directly without additional subsampling
+        model_obs = np.array(algo._accumulated_model_obs)
+        ground_truth_obs = np.array(algo._accumulated_ground_truth_obs)
 
         save_dir = os.path.join(self._snapshotter._snapshot_dir, 'state_saves')
         os.makedirs(save_dir, exist_ok=True)
@@ -652,10 +651,10 @@ class OptionLocalRunner(LocalRunner):
             model_obs=model_obs,
             ground_truth_obs=ground_truth_obs,
             step=self._stats.total_env_steps,
-            n_samples=k,
+            n_samples=n_total,
         )
 
-        logger.log(f"Saved {k} states (subsampled from {n_total}) to {filepath}")
+        logger.log(f"Saved {n_total} probabilistically sampled states to {filepath}")
 
         # Clear accumulated states to prevent unbounded memory growth
         algo._accumulated_model_obs.clear()

@@ -126,6 +126,11 @@ class SAC(IOD):
         return tensors
 
     def _accumulate_states(self, path_data):
+        # Probabilistic sampling to bound memory usage
+        # Keep each state with probability p = subsample_size / save_period
+        # Expected memory: ~subsample_size states (std dev ~sqrt(subsample_size))
+        p = self.save_states_subsample_size / self.save_states_period
+
         for i in range(len(path_data['obs'])):
             model_obs = path_data['obs'][i]
 
@@ -135,8 +140,10 @@ class SAC(IOD):
                 ground_truth_obs = model_obs
 
             for t in range(len(model_obs)):
-                self._accumulated_model_obs.append(model_obs[t])
-                self._accumulated_ground_truth_obs.append(ground_truth_obs[t])
+                # Only accumulate with probability p
+                if np.random.random() < p:
+                    self._accumulated_model_obs.append(model_obs[t])
+                    self._accumulated_ground_truth_obs.append(ground_truth_obs[t])
 
     def _train_components(self, epoch_data):
         if self.replay_buffer is not None and self.replay_buffer.n_transitions_stored < self.min_buffer_size:
