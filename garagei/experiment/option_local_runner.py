@@ -656,3 +656,7 @@ class OptionLocalRunner(LocalRunner):
         )
 
         logger.log(f"Saved {k} states (subsampled from {n_total}) to {filepath}")
+
+        # Clear accumulated states to prevent unbounded memory growth
+        algo._accumulated_model_obs.clear()
+        algo._accumulated_ground_truth_obs.clear()
