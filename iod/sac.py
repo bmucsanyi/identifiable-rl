@@ -142,8 +142,8 @@ class SAC(IOD):
             for t in range(len(model_obs)):
                 # Only accumulate with probability p
                 if np.random.random() < p:
-                    self._accumulated_model_obs.append(model_obs[t])
-                    self._accumulated_ground_truth_obs.append(ground_truth_obs[t])
+                    self._accumulated_model_obs.append(model_obs[t].copy())
+                    self._accumulated_ground_truth_obs.append(ground_truth_obs[t].copy())
 
     def _train_components(self, epoch_data):
         if self.replay_buffer is not None and self.replay_buffer.n_transitions_stored < self.min_buffer_size:
