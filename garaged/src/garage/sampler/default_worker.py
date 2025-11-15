@@ -287,6 +287,9 @@ class DefaultWorker(Worker):
         # Evaluate on SAC states if available - defer heavy computation to sampler
         if has_eval_states and hasattr(self, "_sac_states_dir") and self._sac_states_dir is not None:
             log_dict["_metra_states"] = ground_truth_matrix
+            if hasattr(self, "_raw_ground_truth_states") and self._raw_ground_truth_states:
+                raw_matrix = np.stack(self._raw_ground_truth_states, axis=0).astype(np.float64)
+                log_dict["_metra_states_raw"] = raw_matrix
             sac_eval_payload = self._prepare_sac_eval_payload()
             if sac_eval_payload is not None:
                 log_dict["_sac_eval_data"] = sac_eval_payload
@@ -294,6 +297,8 @@ class DefaultWorker(Worker):
         # Clear the lists
         self._ground_truth_states = []
         self._encoder_outputs = []
+        if hasattr(self, "_raw_ground_truth_states"):
+            self._raw_ground_truth_states = []
 
         for k, v in agent_infos.items():
             agent_infos[k] = np.asarray(v)

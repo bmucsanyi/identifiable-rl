@@ -64,9 +64,9 @@ class OptionLocalRunner(LocalRunner):
 
                 if sample_cpu:
                     if traj_encoder is not None:
-                        traj_encoder = traj_encoder.cpu()
+                        traj_encoder = copy.deepcopy(traj_encoder).cpu()
                     if policy_for_sampler is not None:
-                        policy_for_sampler = policy_for_sampler.cpu()
+                        policy_for_sampler = copy.deepcopy(policy_for_sampler).cpu()
 
                 self._sampler[sampler_key] = self.make_sampler(
                     sampler_cls,

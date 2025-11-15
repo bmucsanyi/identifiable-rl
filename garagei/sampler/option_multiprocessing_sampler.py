@@ -18,7 +18,7 @@ STEP_SIZES = [1, 2, 3, 4, 5, 10, 20]
 VARIANCE_THRESHOLD = 1e-8
 
 
-def aggregate_sac_metrics(sac_payloads, metra_states_list):
+def aggregate_sac_metrics(sac_payloads, metra_states_list, metra_states_raw_list=None):
     """Aggregate SAC evaluation metrics using payloads from workers."""
     payloads = [payload for payload in sac_payloads if payload]
     if not payloads:
@@ -28,6 +28,14 @@ def aggregate_sac_metrics(sac_payloads, metra_states_list):
     filtered_states = [states for states in metra_states_list if states is not None]
     if filtered_states:
         metra_states = np.concatenate(filtered_states, axis=0)
+
+    metra_states_raw = None
+    if metra_states_raw_list is not None:
+        filtered_raw = [states for states in metra_states_raw_list if states is not None]
+        if filtered_raw:
+            metra_states_raw = np.concatenate(filtered_raw, axis=0)
+    if metra_states_raw is None:
+        metra_states_raw = metra_states
 
     metrics = {}
     seen_keys = set()
@@ -40,11 +48,11 @@ def aggregate_sac_metrics(sac_payloads, metra_states_list):
             if key in seen_keys:
                 continue
             seen_keys.add(key)
-            metrics.update(_compute_sac_metrics_for_entry(env_name, entry, metra_states))
+            metrics.update(_compute_sac_metrics_for_entry(env_name, entry, metra_states, metra_states_raw))
     return metrics
 
 
-def _compute_sac_metrics_for_entry(env_name, entry, metra_states):
+def _compute_sac_metrics_for_entry(env_name, entry, metra_states, metra_states_raw):
     metrics = {}
     ground_truth_matrix = entry["ground_truth_matrix"]
     encoder_matrix = entry["encoder_matrix"]
@@ -95,7 +103,7 @@ def _compute_sac_metrics_for_entry(env_name, entry, metra_states):
             metrics[f"r_square_diff_{step_size}_step_sac_{step_str}_object"] = float(r2_diff_object)
             metrics[f"pearson_diff_{step_size}_step_sac_{step_str}_object"] = float(pearson_diff_object)
 
-    covered_mask, uncovered_mask = _compute_coverage_masks(metra_states, ground_truth_matrix, active_dims)
+    covered_mask, uncovered_mask = _compute_coverage_masks(metra_states_raw, ground_truth_matrix, active_dims)
     num_covered = int(np.sum(covered_mask)) if covered_mask is not None else 0
     num_uncovered = int(np.sum(uncovered_mask)) if uncovered_mask is not None else 0
     metrics[f"num_covered_states_sac_{step_str}"] = num_covered
@@ -220,13 +228,13 @@ def _extract_object_ground_truth(env_name, ground_truth_matrix):
     return None
 
 
-def _compute_coverage_masks(metra_states, ground_truth_matrix, active_dims):
-    if metra_states is None or np.sum(active_dims) == 0:
+def _compute_coverage_masks(metra_states_raw, ground_truth_matrix, active_dims):
+    if metra_states_raw is None or np.sum(active_dims) == 0:
         return None, None
 
     decimals = 2
     sac_discretized = np.round(ground_truth_matrix[:, active_dims], decimals=decimals)
-    metra_discretized = np.round(metra_states[:, active_dims], decimals=decimals)
+    metra_discretized = np.round(metra_states_raw[:, active_dims], decimals=decimals)
 
     metra_unique_set = set(map(tuple, metra_discretized))
     covered_mask = np.array([tuple(s) in metra_unique_set for s in sac_discretized])
@@ -603,7 +611,8 @@ def process_log_data(log_data_list, trajectories):
 
     sac_payloads = [elem.get("_sac_eval_data") for elem in log_data_list if "_sac_eval_data" in elem]
     metra_states_list = [elem.get("_metra_states") for elem in log_data_list if "_metra_states" in elem]
-    sac_metrics = aggregate_sac_metrics(sac_payloads, metra_states_list)
+    metra_states_raw_list = [elem.get("_metra_states_raw") for elem in log_data_list if "_metra_states_raw" in elem]
+    sac_metrics = aggregate_sac_metrics(sac_payloads, metra_states_list, metra_states_raw_list)
     log_dict.update(sac_metrics)
 
     return log_dict

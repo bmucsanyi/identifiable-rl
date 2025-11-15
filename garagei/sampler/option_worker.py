@@ -30,6 +30,7 @@ class OptionWorker(DefaultWorker):
         self._ground_truth_states = []
         self._encoder_outputs = []
         self._sac_states_dir = None
+        self._raw_ground_truth_states = []
 
     def update_env(self, env_update):
         if env_update is not None:
@@ -67,6 +68,31 @@ class OptionWorker(DefaultWorker):
             attr_dict[key] = functools.reduce(getattr, [self] + key.split('.'))
         return attr_dict
 
+    def _get_raw_state(self, obs, env_info=None):
+        """Return an unnormalized view of the state for coverage calculations."""
+        if hasattr(self.env, "ground_truth_state") and self.env.ground_truth_state is not None:
+            return np.array(self.env.ground_truth_state, copy=True)
+
+        if env_info is None:
+            env_info = {}
+
+        # Explicit known keys per environment family
+        prioritized_keys = [
+            "next_ori_obs",
+            "original_next_observations",
+        ]
+
+        for key in prioritized_keys:
+            if key in env_info:
+                return np.array(env_info[key], copy=True)
+
+        if hasattr(self.env, "_cur_obs") and getattr(self.env, "_cur_obs") is not None:
+            return np.array(getattr(self.env, "_cur_obs"), copy=True)
+
+        raise RuntimeError(
+            "Unable to determine raw ground-truth state; environment must expose ground_truth_state or original_* fields."
+        )
+
     def start_rollout(self):
         """Begin a new rollout."""
         if 'goal' in self._cur_extra_keys:
@@ -99,6 +125,7 @@ class OptionWorker(DefaultWorker):
         # Clear the lists for a new rollout
         self._ground_truth_states = []
         self._encoder_outputs = []
+        self._raw_ground_truth_states = []
 
         # Store initial state and encoder output only during evaluation
         if hasattr(self, "_deterministic_policy") and self._deterministic_policy:
@@ -110,6 +137,7 @@ class OptionWorker(DefaultWorker):
                 self._ground_truth_states.append(self.env.ground_truth_state)
             else:
                 self._ground_truth_states.append(obs)
+            self._raw_ground_truth_states.append(self._get_raw_state(obs))
 
             # Get encoder output if available
             if self.encoder is not None:
@@ -168,6 +196,7 @@ class OptionWorker(DefaultWorker):
                         self._ground_truth_states.append(self.env.ground_truth_state)
                     else:
                         self._ground_truth_states.append(state)
+                    self._raw_ground_truth_states.append(self._get_raw_state(state, env_info))
 
                     # Get encoder representation if available
                     if self.encoder is not None:
@@ -180,6 +209,7 @@ class OptionWorker(DefaultWorker):
                         self._ground_truth_states.append(self.env.ground_truth_state)
                     else:
                         self._ground_truth_states.append(next_o)
+                    self._raw_ground_truth_states.append(self._get_raw_state(next_o, env_info))
 
                     # Get encoder representation if available
                     if self.encoder is not None:

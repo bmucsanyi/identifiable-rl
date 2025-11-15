@@ -459,7 +459,8 @@ def process_log_data(log_data_list, trajectories):
 
     sac_payloads = [elem.get("_sac_eval_data") for elem in log_data_list if "_sac_eval_data" in elem]
     metra_states_list = [elem.get("_metra_states") for elem in log_data_list if "_metra_states" in elem]
-    sac_metrics = aggregate_sac_metrics(sac_payloads, metra_states_list)
+    metra_states_raw_list = [elem.get("_metra_states_raw") for elem in log_data_list if "_metra_states_raw" in elem]
+    sac_metrics = aggregate_sac_metrics(sac_payloads, metra_states_list, metra_states_raw_list)
     log_dict.update(sac_metrics)
 
     return log_dict
