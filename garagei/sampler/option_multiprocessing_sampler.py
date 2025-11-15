@@ -14,8 +14,12 @@ from garage import TrajectoryBatch
 from garage.sampler import MultiprocessingSampler
 from iod.disentanglement import linear_disentanglement
 
+from garagei.sampler.coverage_utils import discretize_states_for_coverage
+
 STEP_SIZES = [1, 2, 3, 4, 5, 10, 20]
 VARIANCE_THRESHOLD = 1e-8
+_COVERAGE_DEBUG_MAX_PRINTS = 5
+_coverage_debug_counter = 0
 
 
 def aggregate_sac_metrics(sac_payloads, metra_states_list, metra_states_raw_list=None):
@@ -103,7 +107,10 @@ def _compute_sac_metrics_for_entry(env_name, entry, metra_states, metra_states_r
             metrics[f"r_square_diff_{step_size}_step_sac_{step_str}_object"] = float(r2_diff_object)
             metrics[f"pearson_diff_{step_size}_step_sac_{step_str}_object"] = float(pearson_diff_object)
 
-    covered_mask, uncovered_mask = _compute_coverage_masks(metra_states_raw, ground_truth_matrix, active_dims)
+    _log_coverage_inputs(env_name, step_str, metra_states_raw, ground_truth_matrix, active_dims)
+    covered_mask, uncovered_mask = _compute_coverage_masks(
+        env_name, metra_states_raw, ground_truth_matrix, active_dims
+    )
     num_covered = int(np.sum(covered_mask)) if covered_mask is not None else 0
     num_uncovered = int(np.sum(uncovered_mask)) if uncovered_mask is not None else 0
     metrics[f"num_covered_states_sac_{step_str}"] = num_covered
@@ -228,18 +235,54 @@ def _extract_object_ground_truth(env_name, ground_truth_matrix):
     return None
 
 
-def _compute_coverage_masks(metra_states_raw, ground_truth_matrix, active_dims):
+def _compute_coverage_masks(env_name, metra_states_raw, ground_truth_matrix, active_dims):
     if metra_states_raw is None or np.sum(active_dims) == 0:
         return None, None
 
-    decimals = 2
-    sac_discretized = np.round(ground_truth_matrix[:, active_dims], decimals=decimals)
-    metra_discretized = np.round(metra_states_raw[:, active_dims], decimals=decimals)
+    sac_discretized = discretize_states_for_coverage(ground_truth_matrix, active_dims, env_name)
+    metra_discretized = discretize_states_for_coverage(metra_states_raw, active_dims, env_name)
+    if sac_discretized is None or metra_discretized is None:
+        return None, None
 
     metra_unique_set = set(map(tuple, metra_discretized))
     covered_mask = np.array([tuple(s) in metra_unique_set for s in sac_discretized])
     uncovered_mask = ~covered_mask
     return covered_mask, uncovered_mask
+
+
+def _log_coverage_inputs(env_name, step_str, metra_states_raw, ground_truth_matrix, active_dims):
+    global _coverage_debug_counter
+    if _coverage_debug_counter >= _COVERAGE_DEBUG_MAX_PRINTS:
+        return
+    _coverage_debug_counter += 1
+
+    num_active = int(np.sum(active_dims)) if active_dims is not None else 0
+    print(
+        f"[coverage] env={env_name} step={step_str} metra_raw_shape={None if metra_states_raw is None else metra_states_raw.shape} "
+        f"sac_shape={ground_truth_matrix.shape} active_dims={num_active}",
+        flush=True,
+    )
+
+    if metra_states_raw is not None and metra_states_raw.size > 0:
+        sample_idx = min(0, metra_states_raw.shape[0] - 1)
+        print(
+            f"[coverage] metra_raw_first={metra_states_raw[sample_idx][:min(5, metra_states_raw.shape[1])]}",
+            flush=True,
+        )
+        if np.any(active_dims):
+            active_idx = np.where(active_dims)[0]
+            subset = metra_states_raw[sample_idx][active_idx[: min(5, len(active_idx))]]
+            print(f"[coverage] metra_raw_active_first={subset}", flush=True)
+
+    if ground_truth_matrix.size > 0:
+        print(
+            f"[coverage] sac_first={ground_truth_matrix[0][:min(5, ground_truth_matrix.shape[1])]}",
+            flush=True,
+        )
+        if np.any(active_dims):
+            active_idx = np.where(active_dims)[0]
+            subset = ground_truth_matrix[0][active_idx[: min(5, len(active_idx))]]
+            print(f"[coverage] sac_active_first={subset}", flush=True)
 
 
 DEBUG = False

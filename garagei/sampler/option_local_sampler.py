@@ -8,6 +8,8 @@ from garage.sampler import LocalSampler
 
 from iod.disentanglement import linear_disentanglement
 
+from garagei.sampler.coverage_utils import discretize_states_for_coverage
+
 STEP_SIZES = [1, 2, 3, 4, 5, 10, 20]
 VARIANCE_THRESHOLD = 1e-8
 
@@ -89,7 +91,9 @@ def _compute_sac_metrics_for_entry(env_name, entry, metra_states):
             metrics[f"r_square_diff_{step_size}_step_sac_{step_str}_object"] = float(r2_diff_object)
             metrics[f"pearson_diff_{step_size}_step_sac_{step_str}_object"] = float(pearson_diff_object)
 
-    covered_mask, uncovered_mask = _compute_coverage_masks(metra_states, ground_truth_matrix, active_dims)
+    covered_mask, uncovered_mask = _compute_coverage_masks(
+        env_name, metra_states, ground_truth_matrix, active_dims
+    )
     num_covered = int(np.sum(covered_mask)) if covered_mask is not None else 0
     num_uncovered = int(np.sum(uncovered_mask)) if uncovered_mask is not None else 0
     metrics[f"num_covered_states_sac_{step_str}"] = num_covered
@@ -214,13 +218,14 @@ def _extract_object_ground_truth(env_name, ground_truth_matrix):
     return None
 
 
-def _compute_coverage_masks(metra_states, ground_truth_matrix, active_dims):
+def _compute_coverage_masks(env_name, metra_states, ground_truth_matrix, active_dims):
     if metra_states is None or np.sum(active_dims) == 0:
         return None, None
 
-    decimals = 2
-    sac_discretized = np.round(ground_truth_matrix[:, active_dims], decimals=decimals)
-    metra_discretized = np.round(metra_states[:, active_dims], decimals=decimals)
+    sac_discretized = discretize_states_for_coverage(ground_truth_matrix, active_dims, env_name)
+    metra_discretized = discretize_states_for_coverage(metra_states, active_dims, env_name)
+    if sac_discretized is None or metra_discretized is None:
+        return None, None
 
     metra_unique_set = set(map(tuple, metra_discretized))
     covered_mask = np.array([tuple(s) in metra_unique_set for s in sac_discretized])
