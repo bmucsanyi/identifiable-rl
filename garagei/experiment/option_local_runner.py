@@ -58,14 +58,15 @@ class OptionLocalRunner(LocalRunner):
                 cur_worker_args = dict(worker_args, sampler_key=sampler_key)
 
                 kwargs = {}
-                if hasattr(self._algo, "traj_encoder"):
-                    traj_encoder = self._algo.traj_encoder
+                sample_cpu = getattr(self._algo, "sample_cpu", False)
+                traj_encoder = getattr(self._algo, "traj_encoder", None)
+                policy_for_sampler = policy
+
+                if sample_cpu:
                     if traj_encoder is not None:
-                        # Sampler workers live in separate processes; keep their encoders on CPU
-                        # to avoid instantiating an extra CUDA copy per worker.
-                        traj_encoder = copy.deepcopy(traj_encoder).cpu()
-                else:
-                    traj_encoder = None
+                        traj_encoder = traj_encoder.cpu()
+                    if policy_for_sampler is not None:
+                        policy_for_sampler = policy_for_sampler.cpu()
 
                 self._sampler[sampler_key] = self.make_sampler(
                     sampler_cls,
@@ -73,7 +74,7 @@ class OptionLocalRunner(LocalRunner):
                     n_workers=n_workers,
                     worker_class=worker_class,
                     worker_args=cur_worker_args,
-                    policy=policy,
+                    policy=policy_for_sampler,
                     traj_encoder=traj_encoder,
                     **kwargs,
                 )
@@ -82,7 +83,7 @@ class OptionLocalRunner(LocalRunner):
                 cur_worker_args = dict(worker_args, sampler_key=sampler_key)
                 self._n_workers[key] = n_workers
                 self._sampler[sampler_key] = self.make_local_sampler(
-                    policy=policy,
+                    policy=policy_for_sampler,
                     traj_encoder=traj_encoder,
                     worker_args=cur_worker_args,
                 )
