@@ -12,6 +12,7 @@ import matplotlib
 import setproctitle
 from garage import TrajectoryBatch
 from garage.sampler import MultiprocessingSampler
+from garagei.sampler.sac_eval_utils import aggregate_sac_metrics
 
 
 DEBUG = False
@@ -380,5 +381,10 @@ def process_log_data(log_data_list, trajectories):
             log_dict[f"{key_pearson}_mean"] = np.nan
             log_dict[f"{key_pearson}_max"] = np.nan
             log_dict[f"{key_pearson}_std"] = np.nan
+
+    sac_payloads = [elem.get("_sac_eval_data") for elem in log_data_list if "_sac_eval_data" in elem]
+    metra_states_list = [elem.get("_metra_states") for elem in log_data_list if "_metra_states" in elem]
+    sac_metrics = aggregate_sac_metrics(sac_payloads, metra_states_list)
+    log_dict.update(sac_metrics)
 
     return log_dict
