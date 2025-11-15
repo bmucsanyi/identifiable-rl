@@ -109,6 +109,12 @@ def process_log_data(log_data_list, trajectories):
     returns = np.array([sum(elem.rewards) for elem in trajectories])
     returns_argmax = np.argmax(returns)
     returns_argmin = np.argmin(returns)
+    r_square_objects = np.array(
+        [elem.get("r_square_object", np.nan) for elem in log_data_list], dtype=float
+    )
+    pearson_objects = np.array(
+        [elem.get("pearson_object", np.nan) for elem in log_data_list], dtype=float
+    )
 
     log_dict = {
         # Record R^2 for phi(s)
@@ -129,6 +135,35 @@ def process_log_data(log_data_list, trajectories):
         "max_return": np.max(returns),
         "min_return": np.min(returns),
     }
+
+    r_square_object_valid = r_square_objects[~np.isnan(r_square_objects)]
+    if len(r_square_object_valid) > 0:
+        log_dict["r_square_object_min"] = np.min(r_square_object_valid)
+        log_dict["r_square_object_mean"] = np.mean(r_square_object_valid)
+        log_dict["r_square_object_max"] = np.max(r_square_object_valid)
+        log_dict["r_square_object_std"] = np.std(r_square_object_valid)
+    else:
+        log_dict["r_square_object_min"] = np.nan
+        log_dict["r_square_object_mean"] = np.nan
+        log_dict["r_square_object_max"] = np.nan
+        log_dict["r_square_object_std"] = np.nan
+
+    pearson_object_valid = pearson_objects[~np.isnan(pearson_objects)]
+    if len(pearson_object_valid) > 0:
+        log_dict["pearson_object_min"] = np.min(pearson_object_valid)
+        log_dict["pearson_object_mean"] = np.mean(pearson_object_valid)
+        log_dict["pearson_object_max"] = np.max(pearson_object_valid)
+        log_dict["pearson_object_std"] = np.std(pearson_object_valid)
+    else:
+        log_dict["pearson_object_min"] = np.nan
+        log_dict["pearson_object_mean"] = np.nan
+        log_dict["pearson_object_max"] = np.nan
+        log_dict["pearson_object_std"] = np.nan
+
+    log_dict["r_square_object_for_max_return"] = r_square_objects[returns_argmax]
+    log_dict["r_square_object_for_min_return"] = r_square_objects[returns_argmin]
+    log_dict["pearson_object_for_max_return"] = pearson_objects[returns_argmax]
+    log_dict["pearson_object_for_min_return"] = pearson_objects[returns_argmin]
     
     # Process multi-step differences (including step 1)
     step_sizes = [1, 2, 3, 4, 5, 10, 20]
@@ -157,6 +192,38 @@ def process_log_data(log_data_list, trajectories):
             log_dict[f"{key_r2}_max"] = np.nan
             log_dict[f"{key_r2}_std"] = np.nan
         
+        if len(pearson_valid) > 0:
+            log_dict[f"{key_pearson}_min"] = np.min(pearson_valid)
+            log_dict[f"{key_pearson}_mean"] = np.mean(pearson_valid)
+            log_dict[f"{key_pearson}_max"] = np.max(pearson_valid)
+            log_dict[f"{key_pearson}_std"] = np.std(pearson_valid)
+        else:
+            log_dict[f"{key_pearson}_min"] = np.nan
+            log_dict[f"{key_pearson}_mean"] = np.nan
+            log_dict[f"{key_pearson}_max"] = np.nan
+            log_dict[f"{key_pearson}_std"] = np.nan
+
+    for step_size in step_sizes:
+        key_r2 = f"r_square_diff_{step_size}_step_object"
+        key_pearson = f"pearson_diff_{step_size}_step_object"
+
+        r2_multi = np.array([elem.get(key_r2, np.nan) for elem in log_data_list])
+        pearson_multi = np.array([elem.get(key_pearson, np.nan) for elem in log_data_list])
+
+        r2_valid = r2_multi[~np.isnan(r2_multi)]
+        pearson_valid = pearson_multi[~np.isnan(pearson_multi)]
+
+        if len(r2_valid) > 0:
+            log_dict[f"{key_r2}_min"] = np.min(r2_valid)
+            log_dict[f"{key_r2}_mean"] = np.mean(r2_valid)
+            log_dict[f"{key_r2}_max"] = np.max(r2_valid)
+            log_dict[f"{key_r2}_std"] = np.std(r2_valid)
+        else:
+            log_dict[f"{key_r2}_min"] = np.nan
+            log_dict[f"{key_r2}_mean"] = np.nan
+            log_dict[f"{key_r2}_max"] = np.nan
+            log_dict[f"{key_r2}_std"] = np.nan
+
         if len(pearson_valid) > 0:
             log_dict[f"{key_pearson}_min"] = np.min(pearson_valid)
             log_dict[f"{key_pearson}_mean"] = np.mean(pearson_valid)
