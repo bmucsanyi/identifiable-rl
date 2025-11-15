@@ -12,7 +12,226 @@ import matplotlib
 import setproctitle
 from garage import TrajectoryBatch
 from garage.sampler import MultiprocessingSampler
-from garagei.sampler.sac_eval_utils import aggregate_sac_metrics
+from iod.disentanglement import linear_disentanglement
+
+STEP_SIZES = [1, 2, 3, 4, 5, 10, 20]
+VARIANCE_THRESHOLD = 1e-8
+
+
+def aggregate_sac_metrics(sac_payloads, metra_states_list):
+    """Aggregate SAC evaluation metrics using payloads from workers."""
+    payloads = [payload for payload in sac_payloads if payload]
+    if not payloads:
+        return {}
+
+    metra_states = None
+    filtered_states = [states for states in metra_states_list if states is not None]
+    if filtered_states:
+        metra_states = np.concatenate(filtered_states, axis=0)
+
+    metrics = {}
+    seen_keys = set()
+    for payload in payloads:
+        env_name = payload.get("env_name")
+        sac_dir = payload.get("sac_states_dir")
+        for entry in payload.get("sac_states", []):
+            step = entry.get("step")
+            key = (sac_dir, env_name, step)
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
+            metrics.update(_compute_sac_metrics_for_entry(env_name, entry, metra_states))
+    return metrics
+
+
+def _compute_sac_metrics_for_entry(env_name, entry, metra_states):
+    metrics = {}
+    ground_truth_matrix = entry["ground_truth_matrix"]
+    encoder_matrix = entry["encoder_matrix"]
+    step_str = entry["step"]
+
+    ground_truth_matrix = np.asarray(ground_truth_matrix, dtype=np.float64)
+    encoder_matrix = np.asarray(encoder_matrix, dtype=np.float64)
+
+    state_variance = np.var(ground_truth_matrix, axis=0)
+    active_dims = state_variance > VARIANCE_THRESHOLD
+
+    if np.sum(active_dims) > 0:
+        ground_truth_filtered = ground_truth_matrix[:, active_dims]
+        r_square = linear_disentanglement(ground_truth_filtered, encoder_matrix, mode="r2")
+        pearson = linear_disentanglement(ground_truth_filtered, encoder_matrix, mode="pearson")
+    else:
+        r_square = float("nan")
+        pearson = float("nan")
+
+    metrics[f"r_square_sac_{step_str}"] = float(r_square)
+    metrics[f"pearson_sac_{step_str}"] = float(pearson)
+
+    for step_size in STEP_SIZES:
+        r2_diff, pearson_diff = _compute_multi_step_metrics(ground_truth_matrix, encoder_matrix, step_size)
+        metrics[f"r_square_diff_{step_size}_step_sac_{step_str}"] = float(r2_diff)
+        metrics[f"pearson_diff_{step_size}_step_sac_{step_str}"] = float(pearson_diff)
+
+    ground_truth_matrix_object = _extract_object_ground_truth(env_name, ground_truth_matrix)
+    if ground_truth_matrix_object is not None:
+        object_state_variance = np.var(ground_truth_matrix_object, axis=0)
+        object_active_dims = object_state_variance > VARIANCE_THRESHOLD
+
+        if np.sum(object_active_dims) > 0:
+            ground_truth_object_filtered = ground_truth_matrix_object[:, object_active_dims]
+            r_square_object = linear_disentanglement(ground_truth_object_filtered, encoder_matrix, mode="r2")
+            pearson_object = linear_disentanglement(ground_truth_object_filtered, encoder_matrix, mode="pearson")
+        else:
+            r_square_object = float("nan")
+            pearson_object = float("nan")
+
+        metrics[f"r_square_sac_{step_str}_object"] = float(r_square_object)
+        metrics[f"pearson_sac_{step_str}_object"] = float(pearson_object)
+
+        for step_size in STEP_SIZES:
+            r2_diff_object, pearson_diff_object = _compute_multi_step_metrics(
+                ground_truth_matrix_object, encoder_matrix, step_size
+            )
+            metrics[f"r_square_diff_{step_size}_step_sac_{step_str}_object"] = float(r2_diff_object)
+            metrics[f"pearson_diff_{step_size}_step_sac_{step_str}_object"] = float(pearson_diff_object)
+
+    covered_mask, uncovered_mask = _compute_coverage_masks(metra_states, ground_truth_matrix, active_dims)
+    num_covered = int(np.sum(covered_mask)) if covered_mask is not None else 0
+    num_uncovered = int(np.sum(uncovered_mask)) if uncovered_mask is not None else 0
+    metrics[f"num_covered_states_sac_{step_str}"] = num_covered
+    metrics[f"num_uncovered_states_sac_{step_str}"] = num_uncovered
+
+    # Covered subset metrics
+    if num_covered > 0:
+        ground_truth_covered = ground_truth_matrix[covered_mask]
+        encoder_covered = encoder_matrix[covered_mask]
+        metrics.update(
+            _compute_subset_metrics(
+                ground_truth_covered, encoder_covered, step_str, suffix="sac_covered"
+            )
+        )
+
+        if ground_truth_matrix_object is not None:
+            ground_truth_covered_object = ground_truth_matrix_object[covered_mask]
+            metrics.update(
+                _compute_subset_metrics(
+                    ground_truth_covered_object,
+                    encoder_covered,
+                    step_str,
+                    suffix="sac_covered",
+                    object_suffix="_object",
+                )
+            )
+    else:
+        metrics.update(_nan_subset_metrics(step_str, suffix="sac_covered"))
+        if ground_truth_matrix_object is not None:
+            metrics.update(_nan_subset_metrics(step_str, suffix="sac_covered", object_suffix="_object"))
+
+    # Uncovered subset metrics
+    if num_uncovered > 0:
+        ground_truth_uncovered = ground_truth_matrix[uncovered_mask]
+        encoder_uncovered = encoder_matrix[uncovered_mask]
+        metrics.update(
+            _compute_subset_metrics(
+                ground_truth_uncovered, encoder_uncovered, step_str, suffix="sac_uncovered"
+            )
+        )
+
+        if ground_truth_matrix_object is not None:
+            ground_truth_uncovered_object = ground_truth_matrix_object[uncovered_mask]
+            metrics.update(
+                _compute_subset_metrics(
+                    ground_truth_uncovered_object,
+                    encoder_uncovered,
+                    step_str,
+                    suffix="sac_uncovered",
+                    object_suffix="_object",
+                )
+            )
+    else:
+        metrics.update(_nan_subset_metrics(step_str, suffix="sac_uncovered"))
+        if ground_truth_matrix_object is not None:
+            metrics.update(_nan_subset_metrics(step_str, suffix="sac_uncovered", object_suffix="_object"))
+
+    return metrics
+
+
+def _compute_subset_metrics(ground_truth_matrix, encoder_matrix, step_str, suffix, object_suffix=""):
+    metrics = {}
+    subset_variance = np.var(ground_truth_matrix, axis=0)
+    subset_active_dims = subset_variance > VARIANCE_THRESHOLD
+
+    if np.sum(subset_active_dims) > 0:
+        ground_truth_filtered = ground_truth_matrix[:, subset_active_dims]
+        r_square = linear_disentanglement(ground_truth_filtered, encoder_matrix, mode="r2")
+        pearson = linear_disentanglement(ground_truth_filtered, encoder_matrix, mode="pearson")
+    else:
+        r_square = float("nan")
+        pearson = float("nan")
+
+    metrics[f"r_square_{suffix}_{step_str}{object_suffix}"] = float(r_square)
+    metrics[f"pearson_{suffix}_{step_str}{object_suffix}"] = float(pearson)
+
+    for step_size in STEP_SIZES:
+        r2_diff, pearson_diff = _compute_multi_step_metrics(ground_truth_matrix, encoder_matrix, step_size)
+        metrics[f"r_square_diff_{step_size}_step_{suffix}_{step_str}{object_suffix}"] = float(r2_diff)
+        metrics[f"pearson_diff_{step_size}_step_{suffix}_{step_str}{object_suffix}"] = float(pearson_diff)
+
+    return metrics
+
+
+def _nan_subset_metrics(step_str, suffix, object_suffix=""):
+    metrics = {}
+    metrics[f"r_square_{suffix}_{step_str}{object_suffix}"] = float("nan")
+    metrics[f"pearson_{suffix}_{step_str}{object_suffix}"] = float("nan")
+    for step_size in STEP_SIZES:
+        metrics[f"r_square_diff_{step_size}_step_{suffix}_{step_str}{object_suffix}"] = float("nan")
+        metrics[f"pearson_diff_{step_size}_step_{suffix}_{step_str}{object_suffix}"] = float("nan")
+    return metrics
+
+
+def _compute_multi_step_metrics(ground_truth_matrix, encoder_matrix, step_size):
+    if len(ground_truth_matrix) > step_size:
+        gt_diff = ground_truth_matrix[step_size:] - ground_truth_matrix[:-step_size]
+        enc_diff = encoder_matrix[step_size:] - encoder_matrix[:-step_size]
+
+        diff_variance = np.var(gt_diff, axis=0)
+        active_diff_dims = diff_variance > VARIANCE_THRESHOLD
+
+        if np.sum(active_diff_dims) > 0:
+            gt_diff_filtered = gt_diff[:, active_diff_dims]
+            r2_diff = linear_disentanglement(gt_diff_filtered, enc_diff, mode="r2")
+            pearson_diff = linear_disentanglement(gt_diff_filtered, enc_diff, mode="pearson")
+        else:
+            r2_diff = float("nan")
+            pearson_diff = float("nan")
+    else:
+        r2_diff = float("nan")
+        pearson_diff = float("nan")
+
+    return r2_diff, pearson_diff
+
+
+def _extract_object_ground_truth(env_name, ground_truth_matrix):
+    if env_name == "kitchen":
+        return ground_truth_matrix[:, 11:30]
+    if env_name in ["robobin", "robobin_image"]:
+        return ground_truth_matrix[:, 3:9]
+    return None
+
+
+def _compute_coverage_masks(metra_states, ground_truth_matrix, active_dims):
+    if metra_states is None or np.sum(active_dims) == 0:
+        return None, None
+
+    decimals = 2
+    sac_discretized = np.round(ground_truth_matrix[:, active_dims], decimals=decimals)
+    metra_discretized = np.round(metra_states[:, active_dims], decimals=decimals)
+
+    metra_unique_set = set(map(tuple, metra_discretized))
+    covered_mask = np.array([tuple(s) in metra_unique_set for s in sac_discretized])
+    uncovered_mask = ~covered_mask
+    return covered_mask, uncovered_mask
 
 
 DEBUG = False
@@ -311,22 +530,22 @@ def process_log_data(log_data_list, trajectories):
     log_dict["r_square_object_for_min_return"] = r_square_objects[returns_argmin]
     log_dict["pearson_object_for_max_return"] = pearson_objects[returns_argmax]
     log_dict["pearson_object_for_min_return"] = pearson_objects[returns_argmin]
-    
+
     # Process multi-step differences (including step 1)
     step_sizes = [1, 2, 3, 4, 5, 10, 20]
     for step_size in step_sizes:
         # R^2 for multi-step differences
         key_r2 = f"r_square_diff_{step_size}_step"
         key_pearson = f"pearson_diff_{step_size}_step"
-        
+
         # Get values, using np.nan as default
         r2_multi = np.array([elem.get(key_r2, np.nan) for elem in log_data_list])
         pearson_multi = np.array([elem.get(key_pearson, np.nan) for elem in log_data_list])
-        
+
         # Filter out NaN values for statistics
         r2_valid = r2_multi[~np.isnan(r2_multi)]
         pearson_valid = pearson_multi[~np.isnan(pearson_multi)]
-        
+
         # Always add entries, use NaN when no valid data
         if len(r2_valid) > 0:
             log_dict[f"{key_r2}_min"] = np.min(r2_valid)
@@ -338,7 +557,7 @@ def process_log_data(log_data_list, trajectories):
             log_dict[f"{key_r2}_mean"] = np.nan
             log_dict[f"{key_r2}_max"] = np.nan
             log_dict[f"{key_r2}_std"] = np.nan
-        
+
         if len(pearson_valid) > 0:
             log_dict[f"{key_pearson}_min"] = np.min(pearson_valid)
             log_dict[f"{key_pearson}_mean"] = np.mean(pearson_valid)
