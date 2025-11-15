@@ -60,6 +60,10 @@ class OptionLocalRunner(LocalRunner):
                 kwargs = {}
                 if hasattr(self._algo, "traj_encoder"):
                     traj_encoder = self._algo.traj_encoder
+                    if traj_encoder is not None:
+                        # Sampler workers live in separate processes; keep their encoders on CPU
+                        # to avoid instantiating an extra CUDA copy per worker.
+                        traj_encoder = copy.deepcopy(traj_encoder).cpu()
                 else:
                     traj_encoder = None
 
