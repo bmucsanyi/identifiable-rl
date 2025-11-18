@@ -202,17 +202,23 @@ class DefaultWorker(Worker):
             if np.sum(active_dims) > 0:
                 ground_truth_filtered = ground_truth_matrix[:, active_dims]
                 # Note: encoder matrix is not filtered - we want to see which encoder dims predict active GT dims
-                r_square = linear_disentanglement(ground_truth_filtered, encoder_matrix, mode="r2")
-                pearson = linear_disentanglement(ground_truth_filtered, encoder_matrix, mode="pearson")
+                r_square, mse = linear_disentanglement(
+                    ground_truth_filtered, encoder_matrix, mode="r2", return_mse=True
+                )
+                pearson, _ = linear_disentanglement(
+                    ground_truth_filtered, encoder_matrix, mode="pearson", return_mse=True
+                )
             else:
                 # No active dimensions - everything is constant
                 r_square = float('nan')
                 pearson = float('nan')
+                mse = float('nan')
 
             # Calculate multi-step differences for dynamics assessment
             log_dict = {
                 "r_square": float(r_square),
-                "pearson": float(pearson)
+                "pearson": float(pearson),
+                "mse": float(mse)
             }
 
             # Test dynamics at multiple time scales
@@ -229,15 +235,21 @@ class DefaultWorker(Worker):
 
                     if np.sum(active_diff_dims) > 0:
                         gt_diff_filtered = gt_diff[:, active_diff_dims]
-                        r2_diff = linear_disentanglement(gt_diff_filtered, enc_diff, mode="r2")
-                        pearson_diff = linear_disentanglement(gt_diff_filtered, enc_diff, mode="pearson")
+                        r2_diff, mse_diff = linear_disentanglement(
+                            gt_diff_filtered, enc_diff, mode="r2", return_mse=True
+                        )
+                        pearson_diff, _ = linear_disentanglement(
+                            gt_diff_filtered, enc_diff, mode="pearson", return_mse=True
+                        )
                     else:
                         r2_diff = float('nan')
                         pearson_diff = float('nan')
+                        mse_diff = float('nan')
 
                     # Add to log dict with consistent naming
                     log_dict[f"r_square_diff_{step_size}_step"] = float(r2_diff)
                     log_dict[f"pearson_diff_{step_size}_step"] = float(pearson_diff)
+                    log_dict[f"mse_diff_{step_size}_step"] = float(mse_diff)
 
             # Compute object-specific metrics for kitchen and robobin environments
             if ground_truth_matrix_object is not None:
@@ -249,15 +261,21 @@ class DefaultWorker(Worker):
                 if np.sum(object_active_dims) > 0:
                     ground_truth_object_filtered = ground_truth_matrix_object[:, object_active_dims]
                     # Note: encoder matrix is not filtered - we want to see which encoder dims predict active GT dims
-                    r_square_object = linear_disentanglement(ground_truth_object_filtered, encoder_matrix, mode="r2")
-                    pearson_object = linear_disentanglement(ground_truth_object_filtered, encoder_matrix, mode="pearson")
+                    r_square_object, mse_object = linear_disentanglement(
+                        ground_truth_object_filtered, encoder_matrix, mode="r2", return_mse=True
+                    )
+                    pearson_object, _ = linear_disentanglement(
+                        ground_truth_object_filtered, encoder_matrix, mode="pearson", return_mse=True
+                    )
                 else:
                     # No active dimensions - everything is constant
                     r_square_object = float('nan')
                     pearson_object = float('nan')
+                    mse_object = float('nan')
 
                 log_dict["r_square_object"] = float(r_square_object)
                 log_dict["pearson_object"] = float(pearson_object)
+                log_dict["mse_object"] = float(mse_object)
 
                 # Test dynamics at multiple time scales (object only)
                 for step_size in [1, 2, 3, 4, 5, 10, 20]:
@@ -272,15 +290,21 @@ class DefaultWorker(Worker):
 
                         if np.sum(object_active_diff_dims) > 0:
                             gt_diff_object_filtered = gt_diff_object[:, object_active_diff_dims]
-                            r2_diff_object = linear_disentanglement(gt_diff_object_filtered, enc_diff, mode="r2")
-                            pearson_diff_object = linear_disentanglement(gt_diff_object_filtered, enc_diff, mode="pearson")
+                            r2_diff_object, mse_diff_object = linear_disentanglement(
+                                gt_diff_object_filtered, enc_diff, mode="r2", return_mse=True
+                            )
+                            pearson_diff_object, _ = linear_disentanglement(
+                                gt_diff_object_filtered, enc_diff, mode="pearson", return_mse=True
+                            )
                         else:
                             r2_diff_object = float('nan')
                             pearson_diff_object = float('nan')
+                            mse_diff_object = float('nan')
 
                         # Add to log dict with consistent naming
                         log_dict[f"r_square_diff_{step_size}_step_object"] = float(r2_diff_object)
                         log_dict[f"pearson_diff_{step_size}_step_object"] = float(pearson_diff_object)
+                        log_dict[f"mse_diff_{step_size}_step_object"] = float(mse_diff_object)
         else:
             log_dict = {}
 

@@ -61,7 +61,7 @@ def _disentanglement(z, hz, mode: __Mode = "r2", reorder=None):
         return np.diag(np.abs(corr)).mean(), corr
 
 
-def linear_disentanglement(z, hz, mode: __Mode = "r2", train_test_split=False):
+def linear_disentanglement(z, hz, mode: __Mode = "r2", train_test_split=False, return_mse=False):
     """Calculate disentanglement up to linear transformations.
 
     Args:
@@ -70,6 +70,7 @@ def linear_disentanglement(z, hz, mode: __Mode = "r2", train_test_split=False):
         mode: Can be r2, pearson, spearman
         train_test_split: Use first half to train linear model, second half to test.
             Is only relevant if there are less samples then latent dimensions.
+        return_mse: If True, also return mean squared error of the linear fit.
     """
 
     if torch.is_tensor(hz):
@@ -96,9 +97,13 @@ def linear_disentanglement(z, hz, mode: __Mode = "r2", train_test_split=False):
     model = linear_model.LinearRegression()
     model.fit(hz_1, z_1)
 
-    hz_2 = model.predict(hz_2)
+    hz_2_pred = model.predict(hz_2)
+    mse = metrics.mean_squared_error(z_2, hz_2_pred)
 
-    inner_result = _disentanglement(z_2, hz_2, mode=mode, reorder=False)
+    inner_result = _disentanglement(z_2, hz_2_pred, mode=mode, reorder=False)
+
+    if return_mse:
+        return inner_result[0], mse
 
     return inner_result[0]
 

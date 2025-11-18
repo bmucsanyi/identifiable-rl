@@ -70,19 +70,26 @@ def _compute_sac_metrics_for_entry(env_name, entry, metra_states, metra_states_r
 
     if np.sum(active_dims) > 0:
         ground_truth_filtered = ground_truth_matrix[:, active_dims]
-        r_square = linear_disentanglement(ground_truth_filtered, encoder_matrix, mode="r2")
-        pearson = linear_disentanglement(ground_truth_filtered, encoder_matrix, mode="pearson")
+        r_square, mse = linear_disentanglement(
+            ground_truth_filtered, encoder_matrix, mode="r2", return_mse=True
+        )
+        pearson, _ = linear_disentanglement(
+            ground_truth_filtered, encoder_matrix, mode="pearson", return_mse=True
+        )
     else:
         r_square = float("nan")
         pearson = float("nan")
+        mse = float("nan")
 
     metrics[f"r_square_sac_{step_str}"] = float(r_square)
     metrics[f"pearson_sac_{step_str}"] = float(pearson)
+    metrics[f"mse_sac_{step_str}"] = float(mse)
 
     for step_size in STEP_SIZES:
-        r2_diff, pearson_diff = _compute_multi_step_metrics(ground_truth_matrix, encoder_matrix, step_size)
+        r2_diff, pearson_diff, mse_diff = _compute_multi_step_metrics(ground_truth_matrix, encoder_matrix, step_size)
         metrics[f"r_square_diff_{step_size}_step_sac_{step_str}"] = float(r2_diff)
         metrics[f"pearson_diff_{step_size}_step_sac_{step_str}"] = float(pearson_diff)
+        metrics[f"mse_diff_{step_size}_step_sac_{step_str}"] = float(mse_diff)
 
     ground_truth_matrix_object = _extract_object_ground_truth(env_name, ground_truth_matrix)
     if ground_truth_matrix_object is not None:
@@ -91,21 +98,28 @@ def _compute_sac_metrics_for_entry(env_name, entry, metra_states, metra_states_r
 
         if np.sum(object_active_dims) > 0:
             ground_truth_object_filtered = ground_truth_matrix_object[:, object_active_dims]
-            r_square_object = linear_disentanglement(ground_truth_object_filtered, encoder_matrix, mode="r2")
-            pearson_object = linear_disentanglement(ground_truth_object_filtered, encoder_matrix, mode="pearson")
+            r_square_object, mse_object = linear_disentanglement(
+                ground_truth_object_filtered, encoder_matrix, mode="r2", return_mse=True
+            )
+            pearson_object, _ = linear_disentanglement(
+                ground_truth_object_filtered, encoder_matrix, mode="pearson", return_mse=True
+            )
         else:
             r_square_object = float("nan")
             pearson_object = float("nan")
+            mse_object = float("nan")
 
         metrics[f"r_square_sac_{step_str}_object"] = float(r_square_object)
         metrics[f"pearson_sac_{step_str}_object"] = float(pearson_object)
+        metrics[f"mse_sac_{step_str}_object"] = float(mse_object)
 
         for step_size in STEP_SIZES:
-            r2_diff_object, pearson_diff_object = _compute_multi_step_metrics(
+            r2_diff_object, pearson_diff_object, mse_diff_object = _compute_multi_step_metrics(
                 ground_truth_matrix_object, encoder_matrix, step_size
             )
             metrics[f"r_square_diff_{step_size}_step_sac_{step_str}_object"] = float(r2_diff_object)
             metrics[f"pearson_diff_{step_size}_step_sac_{step_str}_object"] = float(pearson_diff_object)
+            metrics[f"mse_diff_{step_size}_step_sac_{step_str}_object"] = float(mse_diff_object)
 
     _log_coverage_inputs(env_name, step_str, metra_states_raw, ground_truth_matrix, active_dims)
     covered_mask, uncovered_mask = _compute_coverage_masks(
@@ -178,19 +192,28 @@ def _compute_subset_metrics(ground_truth_matrix, encoder_matrix, step_str, suffi
 
     if np.sum(subset_active_dims) > 0:
         ground_truth_filtered = ground_truth_matrix[:, subset_active_dims]
-        r_square = linear_disentanglement(ground_truth_filtered, encoder_matrix, mode="r2")
-        pearson = linear_disentanglement(ground_truth_filtered, encoder_matrix, mode="pearson")
+        r_square, mse = linear_disentanglement(
+            ground_truth_filtered, encoder_matrix, mode="r2", return_mse=True
+        )
+        pearson, _ = linear_disentanglement(
+            ground_truth_filtered, encoder_matrix, mode="pearson", return_mse=True
+        )
     else:
         r_square = float("nan")
         pearson = float("nan")
+        mse = float("nan")
 
     metrics[f"r_square_{suffix}_{step_str}{object_suffix}"] = float(r_square)
     metrics[f"pearson_{suffix}_{step_str}{object_suffix}"] = float(pearson)
+    metrics[f"mse_{suffix}_{step_str}{object_suffix}"] = float(mse)
 
     for step_size in STEP_SIZES:
-        r2_diff, pearson_diff = _compute_multi_step_metrics(ground_truth_matrix, encoder_matrix, step_size)
+        r2_diff, pearson_diff, mse_diff = _compute_multi_step_metrics(
+            ground_truth_matrix, encoder_matrix, step_size
+        )
         metrics[f"r_square_diff_{step_size}_step_{suffix}_{step_str}{object_suffix}"] = float(r2_diff)
         metrics[f"pearson_diff_{step_size}_step_{suffix}_{step_str}{object_suffix}"] = float(pearson_diff)
+        metrics[f"mse_diff_{step_size}_step_{suffix}_{step_str}{object_suffix}"] = float(mse_diff)
 
     return metrics
 
@@ -199,9 +222,11 @@ def _nan_subset_metrics(step_str, suffix, object_suffix=""):
     metrics = {}
     metrics[f"r_square_{suffix}_{step_str}{object_suffix}"] = float("nan")
     metrics[f"pearson_{suffix}_{step_str}{object_suffix}"] = float("nan")
+    metrics[f"mse_{suffix}_{step_str}{object_suffix}"] = float("nan")
     for step_size in STEP_SIZES:
         metrics[f"r_square_diff_{step_size}_step_{suffix}_{step_str}{object_suffix}"] = float("nan")
         metrics[f"pearson_diff_{step_size}_step_{suffix}_{step_str}{object_suffix}"] = float("nan")
+        metrics[f"mse_diff_{step_size}_step_{suffix}_{step_str}{object_suffix}"] = float("nan")
     return metrics
 
 
@@ -215,16 +240,22 @@ def _compute_multi_step_metrics(ground_truth_matrix, encoder_matrix, step_size):
 
         if np.sum(active_diff_dims) > 0:
             gt_diff_filtered = gt_diff[:, active_diff_dims]
-            r2_diff = linear_disentanglement(gt_diff_filtered, enc_diff, mode="r2")
-            pearson_diff = linear_disentanglement(gt_diff_filtered, enc_diff, mode="pearson")
+            r2_diff, mse_diff = linear_disentanglement(
+                gt_diff_filtered, enc_diff, mode="r2", return_mse=True
+            )
+            pearson_diff, _ = linear_disentanglement(
+                gt_diff_filtered, enc_diff, mode="pearson", return_mse=True
+            )
         else:
             r2_diff = float("nan")
             pearson_diff = float("nan")
+            mse_diff = float("nan")
     else:
         r2_diff = float("nan")
         pearson_diff = float("nan")
+        mse_diff = float("nan")
 
-    return r2_diff, pearson_diff
+    return r2_diff, pearson_diff, mse_diff
 
 
 def _extract_object_ground_truth(env_name, ground_truth_matrix):
@@ -521,8 +552,9 @@ def run_worker(
             )
 
 def process_log_data(log_data_list, trajectories):
-    r_squares = np.array([elem["r_square"] for elem in log_data_list])
-    pearsons = np.array([elem["pearson"] for elem in log_data_list])
+    r_squares = np.array([elem["r_square"] for elem in log_data_list], dtype=float)
+    pearsons = np.array([elem["pearson"] for elem in log_data_list], dtype=float)
+    mses = np.array([elem.get("mse", np.nan) for elem in log_data_list], dtype=float)
     returns = np.array([sum(elem.rewards) for elem in trajectories])
     returns_argmax = np.argmax(returns)
     returns_argmin = np.argmin(returns)
@@ -532,26 +564,43 @@ def process_log_data(log_data_list, trajectories):
     pearson_objects = np.array(
         [elem.get("pearson_object", np.nan) for elem in log_data_list], dtype=float
     )
+    mse_objects = np.array(
+        [elem.get("mse_object", np.nan) for elem in log_data_list], dtype=float
+    )
 
     log_dict = {
         # Record R^2 for phi(s)
-        "r_square_min": np.min(r_squares),
-        "r_square_mean": np.mean(r_squares),
-        "r_square_max": np.max(r_squares),
-        "r_square_std": np.std(r_squares),
+        "r_square_min": np.nanmin(r_squares),
+        "r_square_mean": np.nanmean(r_squares),
+        "r_square_max": np.nanmax(r_squares),
+        "r_square_std": np.nanstd(r_squares),
         "r_square_for_max_return": r_squares[returns_argmax],
         "r_square_for_min_return": r_squares[returns_argmin],
         # Record Pearson for phi(s)
-        "pearson_min": np.min(pearsons),
-        "pearson_mean": np.mean(pearsons),
-        "pearson_max": np.max(pearsons),
-        "pearson_std": np.std(pearsons),
+        "pearson_min": np.nanmin(pearsons),
+        "pearson_mean": np.nanmean(pearsons),
+        "pearson_max": np.nanmax(pearsons),
+        "pearson_std": np.nanstd(pearsons),
         "pearson_for_max_return": pearsons[returns_argmax],
         "pearson_for_min_return": pearsons[returns_argmin],
         # Record max and min return
         "max_return": np.max(returns),
         "min_return": np.min(returns),
     }
+
+    mse_valid = mses[~np.isnan(mses)]
+    if len(mse_valid) > 0:
+        log_dict["mse_min"] = np.min(mse_valid)
+        log_dict["mse_mean"] = np.mean(mse_valid)
+        log_dict["mse_max"] = np.max(mse_valid)
+        log_dict["mse_std"] = np.std(mse_valid)
+    else:
+        log_dict["mse_min"] = np.nan
+        log_dict["mse_mean"] = np.nan
+        log_dict["mse_max"] = np.nan
+        log_dict["mse_std"] = np.nan
+    log_dict["mse_for_max_return"] = mses[returns_argmax]
+    log_dict["mse_for_min_return"] = mses[returns_argmin]
 
     r_square_object_valid = r_square_objects[~np.isnan(r_square_objects)]
     if len(r_square_object_valid) > 0:
@@ -577,10 +626,24 @@ def process_log_data(log_data_list, trajectories):
         log_dict["pearson_object_max"] = np.nan
         log_dict["pearson_object_std"] = np.nan
 
+    mse_object_valid = mse_objects[~np.isnan(mse_objects)]
+    if len(mse_object_valid) > 0:
+        log_dict["mse_object_min"] = np.min(mse_object_valid)
+        log_dict["mse_object_mean"] = np.mean(mse_object_valid)
+        log_dict["mse_object_max"] = np.max(mse_object_valid)
+        log_dict["mse_object_std"] = np.std(mse_object_valid)
+    else:
+        log_dict["mse_object_min"] = np.nan
+        log_dict["mse_object_mean"] = np.nan
+        log_dict["mse_object_max"] = np.nan
+        log_dict["mse_object_std"] = np.nan
+
     log_dict["r_square_object_for_max_return"] = r_square_objects[returns_argmax]
     log_dict["r_square_object_for_min_return"] = r_square_objects[returns_argmin]
     log_dict["pearson_object_for_max_return"] = pearson_objects[returns_argmax]
     log_dict["pearson_object_for_min_return"] = pearson_objects[returns_argmin]
+    log_dict["mse_object_for_max_return"] = mse_objects[returns_argmax]
+    log_dict["mse_object_for_min_return"] = mse_objects[returns_argmin]
 
     # Process multi-step differences (including step 1)
     step_sizes = [1, 2, 3, 4, 5, 10, 20]
@@ -588,14 +651,17 @@ def process_log_data(log_data_list, trajectories):
         # R^2 for multi-step differences
         key_r2 = f"r_square_diff_{step_size}_step"
         key_pearson = f"pearson_diff_{step_size}_step"
+        key_mse = f"mse_diff_{step_size}_step"
 
         # Get values, using np.nan as default
-        r2_multi = np.array([elem.get(key_r2, np.nan) for elem in log_data_list])
-        pearson_multi = np.array([elem.get(key_pearson, np.nan) for elem in log_data_list])
+        r2_multi = np.array([elem.get(key_r2, np.nan) for elem in log_data_list], dtype=float)
+        pearson_multi = np.array([elem.get(key_pearson, np.nan) for elem in log_data_list], dtype=float)
+        mse_multi = np.array([elem.get(key_mse, np.nan) for elem in log_data_list], dtype=float)
 
         # Filter out NaN values for statistics
         r2_valid = r2_multi[~np.isnan(r2_multi)]
         pearson_valid = pearson_multi[~np.isnan(pearson_multi)]
+        mse_valid = mse_multi[~np.isnan(mse_multi)]
 
         # Always add entries, use NaN when no valid data
         if len(r2_valid) > 0:
@@ -620,15 +686,29 @@ def process_log_data(log_data_list, trajectories):
             log_dict[f"{key_pearson}_max"] = np.nan
             log_dict[f"{key_pearson}_std"] = np.nan
 
+        if len(mse_valid) > 0:
+            log_dict[f"{key_mse}_min"] = np.min(mse_valid)
+            log_dict[f"{key_mse}_mean"] = np.mean(mse_valid)
+            log_dict[f"{key_mse}_max"] = np.max(mse_valid)
+            log_dict[f"{key_mse}_std"] = np.std(mse_valid)
+        else:
+            log_dict[f"{key_mse}_min"] = np.nan
+            log_dict[f"{key_mse}_mean"] = np.nan
+            log_dict[f"{key_mse}_max"] = np.nan
+            log_dict[f"{key_mse}_std"] = np.nan
+
     for step_size in step_sizes:
         key_r2 = f"r_square_diff_{step_size}_step_object"
         key_pearson = f"pearson_diff_{step_size}_step_object"
+        key_mse = f"mse_diff_{step_size}_step_object"
 
-        r2_multi = np.array([elem.get(key_r2, np.nan) for elem in log_data_list])
-        pearson_multi = np.array([elem.get(key_pearson, np.nan) for elem in log_data_list])
+        r2_multi = np.array([elem.get(key_r2, np.nan) for elem in log_data_list], dtype=float)
+        pearson_multi = np.array([elem.get(key_pearson, np.nan) for elem in log_data_list], dtype=float)
+        mse_multi = np.array([elem.get(key_mse, np.nan) for elem in log_data_list], dtype=float)
 
         r2_valid = r2_multi[~np.isnan(r2_multi)]
         pearson_valid = pearson_multi[~np.isnan(pearson_multi)]
+        mse_valid = mse_multi[~np.isnan(mse_multi)]
 
         if len(r2_valid) > 0:
             log_dict[f"{key_r2}_min"] = np.min(r2_valid)
@@ -651,6 +731,17 @@ def process_log_data(log_data_list, trajectories):
             log_dict[f"{key_pearson}_mean"] = np.nan
             log_dict[f"{key_pearson}_max"] = np.nan
             log_dict[f"{key_pearson}_std"] = np.nan
+
+        if len(mse_valid) > 0:
+            log_dict[f"{key_mse}_min"] = np.min(mse_valid)
+            log_dict[f"{key_mse}_mean"] = np.mean(mse_valid)
+            log_dict[f"{key_mse}_max"] = np.max(mse_valid)
+            log_dict[f"{key_mse}_std"] = np.std(mse_valid)
+        else:
+            log_dict[f"{key_mse}_min"] = np.nan
+            log_dict[f"{key_mse}_mean"] = np.nan
+            log_dict[f"{key_mse}_max"] = np.nan
+            log_dict[f"{key_mse}_std"] = np.nan
 
     sac_payloads = [elem.get("_sac_eval_data") for elem in log_data_list if "_sac_eval_data" in elem]
     metra_states_list = [elem.get("_metra_states") for elem in log_data_list if "_metra_states" in elem]
