@@ -82,6 +82,7 @@ class DMCGymWrapper(core.Env):
         )
 
         self.current_state = None
+        self.ground_truth_state = None
 
     def __getattr__(self, name):
         return getattr(self._env, name)
@@ -148,6 +149,8 @@ class DMCGymWrapper(core.Env):
 
         obs = self._get_obs(time_step)
         self.current_state = time_step.observation
+        # Expose low-dim physics state for downstream metrics, even when observations are pixels
+        self.ground_truth_state = self._env.physics.get_state().copy()
         obsafter = self.physics.get_state()
         extra['discount'] = time_step.discount
 
@@ -180,6 +183,10 @@ class DMCGymWrapper(core.Env):
     def reset(self):
         time_step = self._env.reset()
         self.current_state = time_step.observation
+        if hasattr(self._env, "physics"):
+            self.ground_truth_state = self._env.physics.get_state().copy()
+        else:
+            self.ground_truth_state = self.current_state
         obs = self._get_obs(time_step)
         return obs
 
