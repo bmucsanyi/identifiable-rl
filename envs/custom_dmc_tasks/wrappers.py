@@ -149,8 +149,9 @@ class DMCGymWrapper(core.Env):
 
         obs = self._get_obs(time_step)
         self.current_state = time_step.observation
-        # Expose low-dim physics state for downstream metrics, even when observations are pixels
-        self.ground_truth_state = self._env.physics.get_state().copy()
+        gt_state = self._compute_ground_truth_state()
+        if gt_state is not None:
+            self.ground_truth_state = gt_state
         obsafter = self.physics.get_state()
         extra['discount'] = time_step.discount
 
@@ -183,10 +184,9 @@ class DMCGymWrapper(core.Env):
     def reset(self):
         time_step = self._env.reset()
         self.current_state = time_step.observation
-        if hasattr(self._env, "physics"):
-            self.ground_truth_state = self._env.physics.get_state().copy()
-        else:
-            self.ground_truth_state = self.current_state
+        gt_state = self._compute_ground_truth_state()
+        if gt_state is not None:
+            self.ground_truth_state = gt_state
         obs = self._get_obs(time_step)
         return obs
 
@@ -271,3 +271,10 @@ class DMCGymWrapper(core.Env):
         })
 
         return eval_metrics
+
+    def _compute_ground_truth_state(self):
+        """Return the low-dimensional DM Control observation used in state envs."""
+        if not hasattr(self, "task") or not hasattr(self, "physics"):
+            raise RuntimeError("DMCGymWrapper expected underlying env to expose 'task' and 'physics'.")
+        obs_dict = self.task.get_observation(self.physics)
+        return _flatten_obs(obs_dict)
