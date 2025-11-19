@@ -48,6 +48,7 @@ from garagei.torch.optimizers.optimizer_group_wrapper import OptimizerGroupWrapp
 from garagei.torch.utils import xavier_normal_ex
 from garagei.envs.child_policy_env import ChildPolicyEnv
 from garagei.envs.consistent_normalized_env import consistent_normalize
+from garagei.envs.ground_truth_hook import maybe_wrap_with_ground_truth_hook
 from garagei.torch.modules.gaussian_mlp_module_ex import GaussianMLPTwoHeadedModuleEx
 from garagei.torch.modules.categorical_mlp_module_ex import CategoricalMLPModuleEx
 
@@ -310,6 +311,8 @@ def make_env(args: argparse.Namespace, max_path_length: int) -> Any:
             cp_multi_step=args.cp_multi_step,
             cp_num_truncate_obs=cp_num_truncate_obs,
         )
+
+    env = maybe_wrap_with_ground_truth_hook(env, args.env)
 
     return env
 

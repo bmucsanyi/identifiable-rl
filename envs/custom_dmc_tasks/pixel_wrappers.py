@@ -47,16 +47,12 @@ class RenderWrapper(AkroWrapperTrait, gym.Wrapper):
         self.action_space = self.env.action_space
         self.observation_space = akro.Box(low=-np.inf, high=np.inf, shape=(64, 64, 3))
 
-        self.ground_truth_state = None
-
         self.ob_info = dict(
             type='pixel',
             pixel_shape=(64, 64, 3),
         )
 
     def _transform(self, obs):
-        self.ground_truth_state = obs.copy()
-
         pixels = self.env.render(mode='rgb_array', width=64, height=64).copy()
         pixels = pixels.flatten()
         return pixels

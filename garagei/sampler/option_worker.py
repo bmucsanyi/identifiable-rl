@@ -86,12 +86,17 @@ class OptionWorker(DefaultWorker):
             if key in env_info:
                 return np.array(env_info[key], copy=True)
 
-        if hasattr(self.env, "_cur_obs") and getattr(self.env, "_cur_obs") is not None:
-            return np.array(getattr(self.env, "_cur_obs"), copy=True)
-
         raise RuntimeError(
             "Unable to determine raw ground-truth state; environment must expose ground_truth_state or original_* fields."
         )
+
+    def _require_ground_truth_state(self):
+        gt_state = getattr(self.env, "ground_truth_state", None)
+        if gt_state is None:
+            raise RuntimeError(
+                "Deterministic evaluation requires env to expose ground_truth_state; none found."
+            )
+        return np.array(gt_state, copy=True)
 
     def start_rollout(self):
         """Begin a new rollout."""
@@ -133,10 +138,7 @@ class OptionWorker(DefaultWorker):
             if hasattr(self, 'obs_dim'):
                 obs = self._prev_obs[..., :self.obs_dim]
 
-            if hasattr(self.env, "ground_truth_state") and self.env.ground_truth_state is not None:
-                self._ground_truth_states.append(self.env.ground_truth_state)
-            else:
-                self._ground_truth_states.append(obs)
+            self._ground_truth_states.append(self._require_ground_truth_state())
             self._raw_ground_truth_states.append(self._get_raw_state(obs))
 
             # Get encoder output if available
@@ -192,10 +194,7 @@ class OptionWorker(DefaultWorker):
                     # Extract state without goal
                     state = next_o[..., :next_o.shape[-1] // 2]
 
-                    if hasattr(self.env, "ground_truth_state") and self.env.ground_truth_state is not None:
-                        self._ground_truth_states.append(self.env.ground_truth_state)
-                    else:
-                        self._ground_truth_states.append(state)
+                    self._ground_truth_states.append(self._require_ground_truth_state())
                     self._raw_ground_truth_states.append(self._get_raw_state(state, env_info))
 
                     # Get encoder representation if available
@@ -205,10 +204,7 @@ class OptionWorker(DefaultWorker):
                         self._encoder_outputs.append(encoder_output)
                 else:
                     # Use full observation as state
-                    if hasattr(self.env, "ground_truth_state") and self.env.ground_truth_state is not None:
-                        self._ground_truth_states.append(self.env.ground_truth_state)
-                    else:
-                        self._ground_truth_states.append(next_o)
+                    self._ground_truth_states.append(self._require_ground_truth_state())
                     self._raw_ground_truth_states.append(self._get_raw_state(next_o, env_info))
 
                     # Get encoder representation if available
